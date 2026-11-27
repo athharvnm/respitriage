@@ -874,7 +874,7 @@ const sk = M(0xa8765a, {roughness:.72});
 const shirt = M(0x2f6f8f, {roughness:.85});
 const pant = M(0x2b3442, {roughness:.88});
 const wood = M(0x6b4a32, {roughness:.7});
-const hair = M(0x191310, {roughness:.92});
+const hair = M(0xd89328, {roughness:.72, metalness:.05});
 const add = (g, m, x, y, z, p = fig) => mesh(g, m, x, y, z, p);
 
 /* Chair */
@@ -887,6 +887,19 @@ add(new THREE.BoxGeometry(2, 2.1, .1), wood, 0, 2, -.85);
 function latheLimb(pts, mat, seg = 24){
   const v2 = pts.map(([r, y]) => new THREE.Vector2(r, y));
   return new THREE.LatheGeometry(v2, seg);
+}
+
+/* Builds a tapered cylinder segment connecting point a to point b */
+function taperedSegment(a, b, rStart, rEnd, mat, parent = fig){
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const len = dir.length();
+  if(len < 1e-5) return null;
+  const geo = new THREE.CylinderGeometry(rEnd, rStart, len, 18, 1);
+  const m = new THREE.Mesh(geo, mat);
+  m.position.copy(a).addScaledVector(dir, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  (parent || sc).add(m);
+  return m;
 }
 
 /* Torso & Shoulders */
@@ -905,8 +918,61 @@ collar.rotation.x = Math.PI / 2 + .18;
 
 /* Neck & Clip */
 const neck = mesh(latheLimb([[.23,0],[.20,.22],[.19,.46],[.21,.56]], sk, 24), sk, 0, 2.08, .02, torso);
-const clipMesh = mesh(new THREE.BoxGeometry(.28, .22, .11), teal, 0, 2.34, .23, torso);
-mesh(new THREE.BoxGeometry(.32, .06, .04), M(0x38c4b3, {roughness:.3}), 0, 2.34, .28, torso);
+
+/* Sculpted Tracheal Piezoelectric Neck Clip with acoustic pad, bezel & strain-relief boot */
+const clipGroup = new THREE.Group();
+clipGroup.position.set(0, 2.34, .02);
+torso.add(clipGroup);
+
+/* C-shaped spring collar band hugging left, front, and right sides of the neck */
+const collarClipCurve = new THREE.CatmullRomCurve3([
+  V(-.225, 0, -.04),
+  V(-.235, 0, .09),
+  V(-.14, 0, .205),
+  V(0, 0, .235),
+  V(.14, 0, .205),
+  V(.235, 0, .09),
+  V(.225, 0, -.04)
+]);
+mesh(
+  new THREE.TubeGeometry(collarClipCurve, 32, .024, 12, false),
+  M(0x162420, {roughness:.45, metalness:.25}),
+  0, 0, 0, clipGroup
+);
+
+/* Left & right spring clip jaws pinching gently onto the neck skin */
+[-1, 1].forEach(q => {
+  const jaw = mesh(
+    new THREE.BoxGeometry(.055, .13, .075),
+    M(0x1e302b, {roughness:.4, metalness:.3}),
+    q * .225, 0, .02, clipGroup
+  );
+  jaw.rotation.y = -q * .35;
+  mesh(
+    new THREE.SphereGeometry(.024, 10, 10),
+    M(0x38c4b3, {roughness:.35}),
+    q * .198, 0, .035, clipGroup
+  );
+});
+
+/* Compact teal sensor housing seated flush against the front trachea */
+const clipShell = mesh(
+  new THREE.ExtrudeGeometry(roundedRectShape(.20, .16, .035), {
+    depth:.065, bevelEnabled:true, bevelSegments:3, steps:1, bevelSize:.01, bevelThickness:.01
+  }),
+  teal, 0, 0, .225, clipGroup
+);
+clipShell.geometry.center();
+clipShell.position.set(0, 0, .235);
+
+/* Subtle dark acoustic contact face & status LED (no yellow horn) */
+mesh(new THREE.BoxGeometry(.14, .10, .015), M(0x074d46, {roughness:.5}), 0, 0, .272, clipGroup);
+mesh(new THREE.SphereGeometry(.016, 10, 10), new THREE.MeshBasicMaterial({color:0x38c4b3}), 0, .035, .282, clipGroup);
+
+/* Strain-relief boot routing the sensor lead downward */
+const clipBoot = mesh(new THREE.CylinderGeometry(.024, .034, .11, 14), dark, .075, -.11, .215, clipGroup);
+clipBoot.rotation.z = .38;
+const clipMesh = clipGroup;
 
 /* Head */
 const headG = new THREE.Group();
@@ -914,36 +980,37 @@ headG.position.set(0, 2.6, .04);
 torso.add(headG);
 
 const headGeo = latheLimb([
-  [0,0],[.18,.04],[.34,.18],[.44,.42],[.48,.70],[.46,.94],[.34,1.12],[.16,1.20],[0,1.22]
+  [0,0],[.20,.05],[.38,.20],[.46,.46],[.47,.74],[.42,.98],[.30,1.14],[.14,1.21],[0,1.23]
 ], sk, 32);
-const cranium = mesh(headGeo, sk, 0, -.04, 0, headG);
-cranium.scale.set(.86, 1.0, .96);
+const cranium = mesh(headGeo, sk, 0, -.04, .02, headG);
+cranium.scale.set(.94, 1.0, .98);
 
-const hairGeo = latheLimb([
-  [.46,.52],[.50,.74],[.48,.98],[.36,1.16],[.17,1.24],[0,1.26]
-], hair, 32);
-const hairMesh = mesh(hairGeo, hair, 0, -.02, -.03, headG);
-hairMesh.scale.set(.89, 1.02, 1.01);
+/* Rounded Tintin pompadour & swept forelock tuft */
+const pompadour = mesh(new THREE.SphereGeometry(.38, 20, 16), hair, 0, .98, -.03, headG);
+pompadour.scale.set(1.08, .58, 1.12);
 
 [-1, 1].forEach(q => {
-  const ear = mesh(new THREE.SphereGeometry(.09, 12, 10), sk, q * .41, .52, -.02, headG);
-  ear.scale.set(.42, 1.0, .72);
-});
-const nose = mesh(new THREE.ConeGeometry(.065, .18, 12), sk, 0, .50, .46, headG);
-nose.rotation.x = Math.PI / 2 - .2;
+  const ear = mesh(new THREE.SphereGeometry(.085, 12, 10), sk, q * .43, .54, -.02, headG);
+  ear.scale.set(.4, .96, .68);
+  const earRim = mesh(new THREE.TorusGeometry(.052, .015, 8, 18), M(0x8e5f45, {roughness:.76}), q * .455, .55, -.015, headG);
+  earRim.rotation.y = Math.PI / 2 + q * .18;
+  mesh(new THREE.SphereGeometry(.026, 10, 8), M(0x744932, {roughness:.85}), q * .445, .51, -.01, headG);
 
-function taperedSegment(a, b, r0, r1, mat, parent = fig){
-  const d = b.clone().sub(a);
-  const g = new THREE.CylinderGeometry(r1, r0, d.length(), 18);
-  const m = new THREE.Mesh(g, mat);
-  m.position.copy(a).add(b).multiplyScalar(.5);
-  m.quaternion.setFromUnitVectors(V(0, 1, 0), d.clone().normalize());
-  parent.add(m);
-  const j = new THREE.Mesh(new THREE.SphereGeometry(r1 * .96, 14, 12), mat);
-  j.position.copy(b);
-  parent.add(j);
-  return m;
-}
+  /* Expressive brow */
+  const brow = mesh(new THREE.BoxGeometry(.10, .022, .03), hair, q * .15, .74, .41, headG);
+  brow.rotation.z = -q * .08;
+
+  /* Tintin-style dark dot eye + crisp highlight */
+  const eyeGroup = new THREE.Group();
+  eyeGroup.position.set(q * .15, .64, .41);
+  eyeGroup.rotation.y = q * .14;
+  headG.add(eyeGroup);
+
+  mesh(new THREE.SphereGeometry(.038, 14, 12), M(0x141110, {roughness:.25}), 0, 0, .015, eyeGroup);
+  mesh(new THREE.SphereGeometry(.013, 8, 8), new THREE.MeshBasicMaterial({color:0xffffff}), .012, .012, .044, eyeGroup);
+});
+const nose = mesh(new THREE.ConeGeometry(.058, .15, 12), sk, 0, .52, .47, headG);
+nose.rotation.x = Math.PI / 2 - .28;
 
 /* Arms & Hands */
 [-1, 1].forEach(q => {
@@ -963,7 +1030,36 @@ taperedSegment(V(.46, .51, 1.04), fingerTip, .032, .026, sk, torso);
 const oxGroup = new THREE.Group();
 oxGroup.position.copy(fingerTip);
 torso.add(oxGroup);
-mesh(new THREE.BoxGeometry(.22, .18, .30), M(0x1a6fd0, {roughness:.3}), 0, .02, .02, oxGroup);
+
+/* Sculpted Fingertip Pulse Oximeter with hinged upper/lower shells, spring hinge & OLED window */
+mesh(
+  new THREE.ExtrudeGeometry(roundedRectShape(.25, .11, .035), {
+    depth:.32, bevelEnabled:true, bevelSegments:3, steps:1, bevelSize:.01, bevelThickness:.01
+  }),
+  M(0x1659a8, {roughness:.32, metalness:.15}), 0, .075, .02, oxGroup
+).geometry.center();
+mesh(
+  new THREE.ExtrudeGeometry(roundedRectShape(.24, .085, .03), {
+    depth:.31, bevelEnabled:true, bevelSegments:2, steps:1, bevelSize:.008, bevelThickness:.008
+  }),
+  M(0x1f2b36, {roughness:.5, metalness:.2}), 0, -.025, .02, oxGroup
+).geometry.center();
+mesh(new THREE.CylinderGeometry(.024, .024, .27, 14), M(0x8e9ba6, {metalness:.85, roughness:.25}), 0, .04, -.14, oxGroup).rotation.z = Math.PI / 2;
+
+const oledCanvas = document.createElement('canvas');
+oledCanvas.width = 256; oledCanvas.height = 128;
+const oxCtx = oledCanvas.getContext('2d');
+oxCtx.fillStyle = '#051114';
+oxCtx.fillRect(0, 0, 256, 128);
+oxCtx.fillStyle = '#38C4B3';
+oxCtx.font = '700 34px Hanken Grotesk,sans-serif';
+oxCtx.fillText('SpO₂', 22, 50);
+oxCtx.fillStyle = '#FF7A70';
+oxCtx.font = '700 28px Hanken Grotesk,sans-serif';
+oxCtx.fillText('PR', 22, 98);
+const oledTex = new THREE.CanvasTexture(oledCanvas);
+mesh(new THREE.PlaneGeometry(.15, .065), new THREE.MeshBasicMaterial({map:oledTex}), 0, .136, .04, oxGroup).rotation.x = -Math.PI / 2;
+
 const led = mesh(new THREE.SphereGeometry(.032, 12, 10), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true}), 0, .12, .02, oxGroup);
 const beam = mesh(new THREE.CylinderGeometry(.014, .014, .18, 8), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true, opacity:.6}), 0, .02, .02, oxGroup);
 
@@ -1000,6 +1096,25 @@ const chip = mesh(new THREE.BoxGeometry(.76, .12, .76), M(0x141918, {roughness:.
 const chipGlow = mesh(new THREE.PlaneGeometry(.62, .62), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, opacity:.18}), -.45, .185, .08, eg);
 chipGlow.rotation.x = -Math.PI / 2;
 
+/* Procedural silkscreen markings on the ESP32-S3 module PCB */
+const pcbCanvas = document.createElement('canvas');
+pcbCanvas.width = 512; pcbCanvas.height = 320;
+const pcbCtx = pcbCanvas.getContext('2d');
+pcbCtx.fillStyle = '#0b332b';
+pcbCtx.fillRect(0, 0, 512, 320);
+pcbCtx.strokeStyle = 'rgba(216,176,74,0.35)';
+pcbCtx.lineWidth = 3;
+pcbCtx.strokeRect(14, 14, 484, 292);
+pcbCtx.fillStyle = '#cfe8e1';
+pcbCtx.font = '700 26px Hanken Grotesk,sans-serif';
+pcbCtx.fillText('ESP32-S3 DEVKIT', 30, 52);
+pcbCtx.fillStyle = '#8cb5aa';
+pcbCtx.font = '600 17px Hanken Grotesk,sans-serif';
+pcbCtx.fillText('PIEZO IN · PPG IN · USB-C OTG', 30, 286);
+const pcbTex = new THREE.CanvasTexture(pcbCanvas);
+const pcbTop = mesh(new THREE.PlaneGeometry(2.84, 1.68), new THREE.MeshBasicMaterial({map:pcbTex}), 0, .062, 0, eg);
+pcbTop.rotation.x = -Math.PI / 2;
+
 const can = mesh(new THREE.BoxGeometry(1.05, .20, .72), M(0xc7d1ce, {metalness:.88, roughness:.22}), .58, .16, -.30, eg);
 mesh(new THREE.BoxGeometry(.92, .015, .58), M(0x889692, {metalness:.7, roughness:.4}), .58, .265, -.30, eg);
 
@@ -1021,6 +1136,7 @@ for(let i = 0; i < 15; i++){
 
 const usbPort = mesh(new THREE.BoxGeometry(.48, .18, .38), M(0xcfd8d5, {metalness:.88, roughness:.22}), 1.52, .12, .28, eg);
 mesh(new THREE.BoxGeometry(.04, .10, .24), M(0x09110f), 1.75, .12, .28, eg);
+mesh(new THREE.BoxGeometry(.16, .12, .28), M(0x16201d, {roughness:.6}), 1.92, .12, .28, eg);
 const eled = mesh(new THREE.SphereGeometry(.055, 12, 10), new THREE.MeshBasicMaterial({color:0x4cd082}), -1.16, .12, -.52, eg);
 
 /* ---------- Realistic Rounded Android Smartphone ---------- */
