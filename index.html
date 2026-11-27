@@ -269,6 +269,97 @@ body.idle{cursor:none}
 #end .st span{border:1px solid rgba(56,196,179,.5);border-radius:99px;padding:8px 18px;font-weight:600}
 #end small{display:block;max-width:60ch;margin:0 auto;color:var(--mute);font-size:13px}
 
+#gate{
+  position:fixed;
+  inset:0;
+  z-index:30;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  background:radial-gradient(circle at 50% 35%,rgba(19,56,48,.86),rgba(7,19,15,.97));
+  backdrop-filter:blur(14px);
+  transition:opacity .35s ease,visibility .35s ease;
+}
+#gate.unlocked{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
+.gate-card{
+  width:min(400px,92vw);
+  padding:28px 26px 24px;
+  border-radius:20px;
+  background:rgba(9,24,20,.92);
+  border:1px solid rgba(56,196,179,.35);
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+  text-align:left;
+}
+.gate-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:14px;
+  font-weight:800;
+  font-size:19px;
+}
+.gate-card h1{
+  margin:0 0 6px;
+  font-size:24px;
+  line-height:1.15;
+  font-weight:800;
+}
+.gate-card p{
+  margin:0 0 18px;
+  color:var(--mute);
+  font-size:14px;
+}
+.gate-form{
+  display:grid;
+  gap:12px;
+}
+.gate-input{
+  width:100%;
+  padding:12px 14px;
+  border-radius:12px;
+  border:1px solid rgba(156,184,176,.3);
+  background:rgba(7,19,15,.85);
+  color:var(--ink);
+  font:500 15px/1.2 'Hanken Grotesk',sans-serif;
+  outline:none;
+  transition:border-color .2s ease,box-shadow .2s ease;
+}
+.gate-input:focus{
+  border-color:var(--acc);
+  box-shadow:0 0 0 3px rgba(56,196,179,.18);
+}
+.gate-btn{
+  padding:12px 16px;
+  border-radius:12px;
+  border:1px solid rgba(56,196,179,.6);
+  background:linear-gradient(135deg,rgba(56,196,179,.28),rgba(11,138,125,.35));
+  color:var(--ink);
+  font:700 14px/1 'Hanken Grotesk',sans-serif;
+  letter-spacing:.03em;
+  cursor:pointer;
+  transition:transform .15s ease,border-color .2s ease,background .2s ease;
+}
+.gate-btn:hover{
+  transform:translateY(-1px);
+  border-color:var(--acc);
+  background:linear-gradient(135deg,rgba(56,196,179,.38),rgba(11,138,125,.48));
+}
+.gate-err{
+  min-height:18px;
+  font-size:13px;
+  color:#FF7A70;
+  font-weight:600;
+}
+.gate-foot{
+  margin-top:12px;
+  font-size:12px;
+  color:var(--mute);
+}
+
 #prog{
   position:fixed;
   left:34px;
@@ -339,6 +430,19 @@ body.clean #hint,body.clean #brand small{display:none}
   <div class="st"><span>~₹1,500 per unit</span><span>~₹0.50 per screening</span><span>100% offline</span></div>
   <small>RespiTriage is a clinical decision-support aid for ASHA workers. It is not a diagnosis and does not replace clinical judgment or confirmatory lab testing.</small>
 </div>
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+  <div class="gate-card">
+    <div class="gate-head h"><span id="gateLogo"></span><span>RespiTriage</span></div>
+    <h1 id="gateTitle" class="h">Access required</h1>
+    <p>Enter the site passcode to open the interactive demo and audio.</p>
+    <form id="gateForm" class="gate-form" autocomplete="off">
+      <input id="gateInput" class="gate-input" type="password" placeholder="Passcode" aria-label="Site passcode" required>
+      <button type="submit" class="gate-btn">Unlock Demo</button>
+      <div id="gateErr" class="gate-err" aria-live="polite"></div>
+    </form>
+    <div class="gate-foot">Authorized preview sessions only.</div>
+  </div>
+</div>
 <div id="prog"></div>
 <div id="hint">Space pause · ←/→ scene · R restart · F fullscreen · M audio · H toggle hints</div>
 
@@ -359,6 +463,102 @@ function brandMarkSVG(variant = ''){
 
 $('brandLogo').innerHTML = brandMarkSVG('');
 $('endLogo').innerHTML = brandMarkSVG('lg');
+$('gateLogo').innerHTML = brandMarkSVG('');
+
+/* ---------- Passcode Verification (Salted SHA-256 Digest) ---------- */
+const ACCESS_SALT = 'rt-demo-v1:';
+const ACCESS_DIGEST = '6b9321899a11e7302e887a6a12c38f7c4ecbf61d3be6c470b14d9f1d0d47e944';
+let isUnlocked = false;
+
+function sha256Pure(bytes){
+  const K = new Uint32Array([
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+  ]);
+  const rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  const bitLen = bytes.length * 8;
+  const padLen = (((bytes.length + 9 + 63) >> 6) << 6);
+  const m = new Uint8Array(padLen);
+  m.set(bytes);
+  m[bytes.length] = 0x80;
+  const dv = new DataView(m.buffer);
+  dv.setUint32(padLen - 4, bitLen >>> 0, false);
+  dv.setUint32(padLen - 8, Math.floor(bitLen / 0x100000000), false);
+
+  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a,
+      h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+
+  const w = new Uint32Array(64);
+  for(let off = 0; off < padLen; off += 64){
+    for(let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4, false);
+    for(let i = 16; i < 64; i++){
+      const s0 = rotr(w[i-15], 7) ^ rotr(w[i-15], 18) ^ (w[i-15] >>> 3);
+      const s1 = rotr(w[i-2], 17) ^ rotr(w[i-2], 19) ^ (w[i-2] >>> 10);
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for(let i = 0; i < 64; i++){
+      const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const ch = (e & f) ^ ((~e) & g);
+      const temp1 = (h + S1 + ch + K[i] + w[i]) >>> 0;
+      const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+      h = g; g = f; f = e; e = (d + temp1) >>> 0;
+      d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0;
+  }
+  return [h0, h1, h2, h3, h4, h5, h6, h7]
+    .map(n => (n >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+async function digestPasscode(val){
+  const data = new TextEncoder().encode(ACCESS_SALT + val);
+  if(window.crypto && window.crypto.subtle){
+    const buf = await window.crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return sha256Pure(data);
+}
+
+function unlockSite(){
+  if(isUnlocked) return;
+  isUnlocked = true;
+  $('gate').classList.add('unlocked');
+  S.pause = false;
+  go(0);
+  SFX.ensure();
+  requestAnimationFrame(frame);
+}
+
+$('gateForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const inp = $('gateInput');
+  const err = $('gateErr');
+  const candidate = inp.value;
+  err.textContent = '';
+  const computed = await digestPasscode(candidate);
+  if(computed === ACCESS_DIGEST){
+    inp.value = '';
+    unlockSite();
+  }else{
+    err.textContent = 'Incorrect passcode.';
+    inp.select();
+  }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  S.pause = true;
+  $('gateInput').focus();
+});
 
 /* ---------- story & reels beats ---------- */
 const SYM = {spo2:96, hr:88, vib:.72, sym:1, flag:0};
@@ -803,8 +1003,18 @@ const SFX = {
 
 SFX.muted = false;
 SFX.syncUI();
-SFX.ensure();
-window.addEventListener('load', () => SFX.ensure(), {once:true});
+$('audioBtn').addEventListener('click', () => {
+  if(!isUnlocked){
+    $('gateInput').focus();
+    return;
+  }
+  SFX.toggleMute();
+});
+['pointerdown', 'keydown'].forEach(ev => {
+  window.addEventListener(ev, () => {
+    if(isUnlocked) SFX.ensure();
+  }, {passive:true});
+});
 $('audioBtn').addEventListener('click', () => SFX.toggleMute());
 ['pointerdown', 'keydown'].forEach(ev => {
   window.addEventListener(ev, () => SFX.ensure(), {once:true, passive:true});
@@ -1457,6 +1667,7 @@ addEventListener('resize', size);
 size();
 
 function frame(now){
+  if(!isUnlocked) return;
   const dt = Math.min(.1, (now - last) / 1000);
   last = now;
   const T = now / 1000;
@@ -1634,6 +1845,7 @@ addEventListener('mousemove', wake);
 wake();
 
 addEventListener('keydown', e => {
+  if(!isUnlocked) return;
   if(e.code === 'Space'){
     e.preventDefault();
     S.pause = !S.pause;
@@ -1652,9 +1864,6 @@ addEventListener('keydown', e => {
     document.body.classList.toggle('clean');
   }
 });
-
-go(0);
-requestAnimationFrame(frame);
 </script>
 </body>
 </html>
