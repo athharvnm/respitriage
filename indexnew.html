@@ -1,0 +1,1929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RespiTriage – autoplay film</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Hanken+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#E8F4F0;
+  --mute:#9CB8B0;
+  --acc:#38C4B3;
+  --lv:#F2A93B;
+  --lvbg:rgba(242,169,59,.14);
+}
+*{box-sizing:border-box}
+html,body{
+  margin:0;
+  height:100%;
+  overflow:hidden;
+  background:#07130F;
+  color:var(--ink);
+  font:400 18px/1.45 'Hanken Grotesk',system-ui,sans-serif;
+}
+body.idle{cursor:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+.h{font-family:'Bricolage Grotesque','Hanken Grotesk',sans-serif}
+
+#brand{
+  position:fixed;
+  top:max(22px,env(safe-area-inset-top));
+  left:34px;
+  z-index:12;
+  display:flex;
+  gap:12px;
+  align-items:center;
+  font-weight:800;
+  font-size:22px;
+}
+.rt-mark{
+  width:30px;
+  height:30px;
+  flex:0 0 auto;
+  color:var(--acc);
+  filter:drop-shadow(0 0 10px rgba(56,196,179,.28));
+}
+.rt-mark--lg{
+  width:46px;
+  height:46px;
+  color:var(--acc);
+}
+#brand small{font:400 14px 'Hanken Grotesk',sans-serif;color:var(--mute);margin-left:6px}
+
+#audioBtn{
+  position:fixed;
+  top:max(20px,env(safe-area-inset-top));
+  right:34px;
+  z-index:15;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 14px;
+  border-radius:999px;
+  border:1px solid rgba(56,196,179,.45);
+  background:rgba(7,19,15,.82);
+  color:var(--ink);
+  font:600 12.5px/1 'Hanken Grotesk',sans-serif;
+  cursor:pointer;
+  backdrop-filter:blur(10px);
+  transition:transform .2s ease,border-color .2s ease,background .2s ease;
+}
+#audioBtn:hover{transform:translateY(-1px);border-color:var(--acc)}
+#audioBtn.muted{border-color:rgba(156,184,176,.28);color:var(--mute)}
+#audioBtn.locked{border-color:rgba(242,169,59,.85);background:rgba(44,30,9,.88);color:#FFE7BD;animation:pulseAudio 1.8s ease-in-out infinite}
+@keyframes pulseAudio{0%,100%{box-shadow:0 0 0 0 rgba(242,169,59,.35)}50%{box-shadow:0 0 0 8px rgba(242,169,59,0)}}
+#audioBtn .eq{display:inline-flex;align-items:flex-end;gap:2px;height:12px}
+#audioBtn .eq span{width:2.5px;height:4px;border-radius:2px;background:var(--acc);transition:height .15s ease}
+#audioBtn:not(.muted) .eq span:nth-child(1){animation:eqBar .75s ease-in-out infinite}
+#audioBtn:not(.muted) .eq span:nth-child(2){animation:eqBar .55s ease-in-out .15s infinite}
+#audioBtn:not(.muted) .eq span:nth-child(3){animation:eqBar .85s ease-in-out .3s infinite}
+#audioBtn.muted .eq span{height:3px;background:var(--mute)}
+@keyframes eqBar{0%,100%{height:3px}50%{height:12px}}
+
+#voxTag{
+  position:fixed;
+  left:34px;
+  top:max(66px,calc(env(safe-area-inset-top) + 44px));
+  z-index:12;
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  padding:8px 14px;
+  border-radius:999px;
+  background:rgba(7,19,15,.84);
+  border:1px solid rgba(56,196,179,.45);
+  backdrop-filter:blur(10px);
+  font:600 12.5px/1 'Hanken Grotesk',sans-serif;
+  color:var(--ink);
+  opacity:0;
+  transform:translateY(-8px) scale(.94);
+  pointer-events:none;
+  transition:opacity .25s ease,transform .3s cubic-bezier(.18,.95,.3,1.15),border-color .25s ease,background .25s ease;
+  box-shadow:0 10px 26px rgba(0,0,0,.4);
+}
+#voxTag.on{opacity:1;transform:translateY(0) scale(1)}
+#voxTag.cough{border-color:rgba(255,122,112,.75);background:rgba(48,14,14,.84);color:#FFD6D2}
+#voxTag.vowel{border-color:rgba(242,169,59,.75);background:rgba(44,30,9,.84);color:#FFE7BD}
+#voxTag .dot{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc)}
+#voxTag.cough .dot{background:#FF7A70;box-shadow:0 0 12px #FF7A70}
+#voxTag.vowel .dot{background:#F2A93B;box-shadow:0 0 12px #F2A93B}
+#voxTag .meter{width:54px;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
+#voxTag .meter i{display:block;height:100%;width:0%;background:currentColor;border-radius:99px;transition:width .12s linear}
+
+#cap{
+  position:fixed;
+  left:34px;
+  bottom:11%;
+  z-index:11;
+  max-width:min(560px,52vw);
+  text-shadow:0 2px 24px #07130F,0 0 3px #07130F;
+}
+#cap .k{
+  display:inline-block;
+  color:var(--acc);
+  font-weight:700;
+  font-size:13px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  opacity:0;
+}
+#cap h2{
+  margin:4px 0 8px;
+  font-size:clamp(30px,4.2vw,58px);
+  line-height:1.02;
+  font-weight:800;
+  letter-spacing:-.02em;
+  opacity:0;
+}
+#cap p{
+  margin:0 0 8px;
+  color:#CFE3DD;
+  font-size:clamp(15px,1.45vw,21px);
+  opacity:0;
+}
+#cap.show .k{animation:reelBadgeIn .32s cubic-bezier(.2,.9,.3,1.15) .04s forwards}
+#cap.show h2{animation:reelPunchIn .42s cubic-bezier(.18,.95,.28,1.12) .09s forwards}
+#cap.show p{animation:reelSubIn .38s cubic-bezier(.2,.9,.3,1.08) .15s forwards}
+#cap.out .k,#cap.out h2,#cap.out p{animation:reelOut .2s ease-in forwards}
+
+@keyframes reelBadgeIn{
+  from{opacity:0;transform:translateY(10px) scale(.92)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes reelPunchIn{
+  0%{opacity:0;transform:translateY(18px) scale(.86)}
+  70%{opacity:1;transform:translateY(-2px) scale(1.03)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes reelSubIn{
+  from{opacity:0;transform:translateY(14px) scale(.94)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@keyframes reelOut{
+  from{opacity:1;transform:translateY(0) scale(1)}
+  to{opacity:0;transform:translateY(-8px) scale(.96)}
+}
+
+.reel-beat{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;max-width:100%}
+.reel-beat span{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:4px 10px;
+  border-radius:999px;
+  background:rgba(7,19,15,.82);
+  border:1px solid rgba(156,184,176,.28);
+  color:var(--ink);
+  font:700 11.5px/1 'Hanken Grotesk',sans-serif;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  opacity:0;
+  transform:translateY(8px) scale(.88);
+  transition:opacity .26s ease,transform .32s cubic-bezier(.18,.95,.3,1.18),border-color .25s ease,background .25s ease;
+}
+.reel-beat span.pop{opacity:1;transform:translateY(0) scale(1)}
+.reel-beat span.cough-pill{border-color:rgba(255,122,112,.65);background:rgba(255,122,112,.16);color:#FFD2CE}
+.reel-beat span.vowel-pill{border-color:rgba(242,169,59,.65);background:rgba(242,169,59,.16);color:#FFE4B5}
+
+#ver{
+  position:fixed;
+  top:max(66px,calc(env(safe-area-inset-top) + 44px));
+  right:34px;
+  z-index:12;
+  width:min(330px,40vw);
+  padding:16px 18px;
+  border-radius:16px;
+  background:var(--lvbg);
+  border:2px solid var(--lv);
+  backdrop-filter:blur(10px);
+  opacity:0;
+  transform:translateY(-10px);
+  transition:opacity .5s,transform .5s,background .4s,border-color .4s;
+}
+#ver.on{opacity:1;transform:none}
+#ver .p{display:inline-block;background:var(--lv);color:#07130F;font-weight:800;font-size:13px;padding:2px 12px;border-radius:99px}
+#ver h3{margin:8px 0 4px;font-size:22px;line-height:1.1}
+#ver p{margin:0;font-size:14px;color:#CFE3DD}
+
+#hud{
+  position:fixed;
+  right:34px;
+  bottom:11%;
+  z-index:11;
+  width:min(300px,34vw);
+  display:grid;
+  gap:8px;
+  opacity:0;
+  transition:opacity .6s;
+}
+.w{background:rgba(7,19,15,.62);border:1px solid rgba(156,184,176,.25);border-radius:12px;padding:8px 10px;backdrop-filter:blur(8px)}
+.w div{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.w canvas{width:100%;height:54px;display:block}
+
+#chip{
+  position:fixed;
+  right:34px;
+  top:96px;
+  z-index:11;
+  width:min(600px,50vw);
+  height:340px;
+  border-radius:18px;
+  background:rgba(7,19,15,.8);
+  border:1px solid rgba(56,196,179,.45);
+  backdrop-filter:blur(10px);
+  opacity:0;
+  transition:opacity .6s;
+  pointer-events:none;
+}
+
+#end{
+  position:fixed;
+  inset:0;
+  z-index:14;
+  display:grid;
+  place-content:center;
+  justify-items:center;
+  text-align:center;
+  gap:22px;
+  background:radial-gradient(ellipse at center,rgba(7,19,15,.55),rgba(7,19,15,.92));
+  opacity:0;
+  pointer-events:none;
+  transition:opacity 1s;
+  padding:24px;
+}
+#end.on{opacity:1}
+.end-brand{
+  display:inline-flex;
+  align-items:center;
+  gap:12px;
+  font-weight:800;
+  font-size:20px;
+  letter-spacing:.01em;
+  color:var(--ink);
+}
+#end h2{margin:0;font-size:clamp(34px,6vw,84px);font-weight:800;letter-spacing:-.03em;line-height:1}
+#end .st{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+#end .st span{border:1px solid rgba(56,196,179,.5);border-radius:99px;padding:8px 18px;font-weight:600}
+#end small{display:block;max-width:60ch;margin:0 auto;color:var(--mute);font-size:13px}
+
+#prog{
+  position:fixed;
+  left:34px;
+  right:34px;
+  bottom:max(26px,env(safe-area-inset-bottom));
+  z-index:12;
+  display:flex;
+  gap:6px;
+}
+#prog i{flex:1;height:3px;border-radius:2px;background:rgba(156,184,176,.25);overflow:hidden}
+#prog b{display:block;height:100%;width:0;background:var(--acc)}
+
+#hint{
+  position:fixed;
+  left:50%;
+  transform:translateX(-50%);
+  bottom:max(42px,env(safe-area-inset-bottom));
+  z-index:12;
+  font-size:13px;
+  color:var(--mute);
+  transition:opacity 1s;
+  white-space:nowrap;
+}
+body.clean #hint,body.clean #brand small{display:none}
+
+@media (max-width:760px){
+  #hud{display:none}
+  #ver{width:60vw}
+  #cap{max-width:88vw;bottom:14%}
+  #chip{width:92vw;height:300px;right:4vw;top:70px}
+}
+@media (prefers-reduced-motion:reduce){
+  #cap.show .k,#cap.show h2,#cap.show p,#cap.out .k,#cap.out h2,#cap.out p{animation:none;opacity:1}
+}
+</style>
+</head>
+<body class="clean">
+<canvas id="gl"></canvas>
+<div id="brand" class="h">
+  <span id="brandLogo"></span>
+  <span>RespiTriage</span>
+  <small>Simulated demo · all values are illustrative</small>
+</div>
+<button id="audioBtn" type="button" aria-label="Toggle audio and score">
+  <span class="eq" aria-hidden="true"><span></span><span></span><span></span></span>
+  <span id="audioLabel">Sound On</span>
+</button>
+<div id="voxTag" aria-live="polite">
+  <span class="dot"></span>
+  <span id="voxText">Listening…</span>
+  <span class="meter"><i id="voxBar"></i></span>
+</div>
+<div id="cap">
+  <div class="k" id="ck"></div>
+  <h2 class="h" id="ct"></h2>
+  <p id="cx"></p>
+  <div class="reel-beat" id="reelBeat"></div>
+</div>
+<div id="ver" aria-live="polite"><span class="p h" id="vp">YELLOW</span><h3 class="h" id="vt"></h3><p id="vw"></p></div>
+<div id="hud">
+  <div class="w"><div><span>Neck vibration</span><span id="l1"></span></div><canvas id="c1"></canvas></div>
+  <div class="w"><div><span>Pulse wave</span><span id="l2"></span></div><canvas id="c2"></canvas></div>
+</div>
+<canvas id="chip" aria-label="Animated view inside the ESP32-S3 module"></canvas>
+<div id="end">
+  <div class="end-brand h"><span id="endLogo"></span><span>RespiTriage</span></div>
+  <h2 class="h">Triage in a village,<br>without a signal.</h2>
+  <div class="st"><span>~₹1,500 per unit</span><span>~₹0.50 per screening</span><span>100% offline</span></div>
+  <small>RespiTriage is a clinical decision-support aid for ASHA workers. It is not a diagnosis and does not replace clinical judgment or confirmatory lab testing.</small>
+</div>
+<div id="prog"></div>
+<div id="hint">Space pause · ←/→ scene · R restart · F fullscreen · M audio · H toggle hints</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/* ---------- Geometric Brand Mark (Collar Arc + Signal Wave + Status Node) ---------- */
+function brandMarkSVG(variant = ''){
+  const cls = variant ? `rt-mark rt-mark--${variant}` : 'rt-mark';
+  return `<svg class="${cls}" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+    <path d="M8 10.5A12 12 0 0 1 28 10.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M5.5 18.5H12.2L15.4 13.2L19.6 23.4L23.1 16.5H30.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="28" cy="26.5" r="3.2" fill="currentColor"/>
+  </svg>`;
+}
+
+$('brandLogo').innerHTML = brandMarkSVG('');
+$('endLogo').innerHTML = brandMarkSVG('lg');
+
+/* ---------- story & reels beats ---------- */
+const SYM = {spo2:96, hr:88, vib:.72, sym:1, flag:0};
+const LOW = {spo2:88, hr:108, vib:.58, sym:1, flag:0};
+
+const SC = [
+  {
+    d:5200, k:'', t:'RespiTriage',
+    x:'A neck clip, a fingertip oximeter and an offline phone. Triage for a patient with a cough, anywhere.',
+    cam:[0,.9,14.5], look:[0,-.2,0], v:SYM,
+    beats:[
+      {at:450, text:'NECK CLIP', cls:'cough-pill'},
+      {at:1250, text:'OXIMETER'},
+      {at:2050, text:'100% OFFLINE'}
+    ]
+  },
+  {
+    d:9500, k:'Step 1 · Neck clip', t:'Hear the throat, not the room.',
+    x:'A piezoelectric clip senses skin vibration during a cough or a 10-second vowel. Household noise never reaches it.',
+    cam:[-1.3,1.2,5.2], look:[-3.9,.25,.15], v:SYM, f:0,
+    coughAt:[650, 3850],
+    vowelAt:5200,
+    beats:[
+      {at:550, text:'COUGH BURST', cls:'cough-pill'},
+      {at:3750, text:'2ND COUGH', cls:'cough-pill'},
+      {at:5200, text:'10s /aː/ VOWEL', cls:'vowel-pill'}
+    ]
+  },
+  {
+    d:7200, k:'Step 2 · Pulse oximeter', t:'Oxygen from a fingertip.',
+    x:'Red and infrared light read SpO₂ and pulse rate from the blood-volume wave.',
+    cam:[-.8,-1.1,5.2], look:[-3.6,-1.7,.65], v:SYM, f:1,
+    beats:[
+      {at:500, text:'RED + IR PPG'},
+      {at:1500, text:'LIVE SpO₂ & HR'}
+    ]
+  },
+  {
+    d:6200, k:'Step 3 · ESP32-S3 module', t:'One small module in the middle.',
+    x:'Both sensor streams arrive here, and clean data leaves over USB-C to the phone. No internet involved.',
+    cam:[-.4,1.1,5.4], look:[-.2,-.3,0], v:SYM, f:2,
+    beats:[
+      {at:500, text:'DUAL SENSOR IN'},
+      {at:1600, text:'USB-C OTG OUT'}
+    ]
+  },
+  {
+    d:11200, k:'Inside the module', t:'Raw signals in. Clean packets out.',
+    x:'The ESP32-S3 band-pass filters both signals, digitises them, and scores signal quality. Only clean data goes on to the phone.',
+    cam:[-.2,2,3.9], look:[-.2,0,0], v:SYM, f:4,
+    beats:[
+      {at:600, text:'BAND-PASS FILTER'},
+      {at:2000, text:'12-BIT ADC'},
+      {at:3400, text:'SQI CHECK'}
+    ]
+  },
+  {
+    d:10200, k:'Step 4 · Offline triage', t:'A colour the ASHA can act on.',
+    x:'A local LiteRT model combines vibration, SpO₂ and clinical rules in under 30 seconds. Symptoms plus elevated vibration give YELLOW.',
+    cam:[3.6,.8,5.6], look:[4.1,.3,0], v:SYM, f:3, scan:[1500,5200],
+    beats:[
+      {at:600, text:'ON-DEVICE LITERT'},
+      {at:2200, text:'SCANNING…'},
+      {at:6700, text:'YELLOW · REFER', cls:'vowel-pill'}
+    ]
+  },
+  {
+    d:7600, k:'Safety rule', t:'Low oxygen overrides everything.',
+    x:'SpO₂ below 92% turns the result RED at once, whatever the vibration score says. Red-flag symptoms do the same.',
+    cam:[3.4,.7,5.2], look:[4.1,.3,0], v:LOW, f:3, scan:[2600,2400],
+    beats:[
+      {at:450, text:'SpO₂ < 92%', cls:'cough-pill'},
+      {at:2750, text:'RED · URGENT CARE', cls:'cough-pill'}
+    ]
+  },
+  {
+    d:7200, end:1, cam:[0,1.2,13.5], look:[0,0,0], v:LOW
+  }
+];
+
+const S = {
+  i:0,
+  t:0,
+  pause:false,
+  v:{...SYM},
+  tgt:{...SYM},
+  sym:1,
+  burst:0,
+  pr:0,
+  espFocus:0,
+  ex:0,
+  firedCoughs:new Set(),
+  firedVowel:false,
+  firedBeats:new Set()
+};
+
+function decide(){
+  const spo2 = S.v.spo2;
+  const vib = S.v.vib;
+  if(spo2 < 92 || S.v.flag){
+    return {
+      lv:'RED', c:'#FF7A70', t:'Urgent PHC / hospital referral', sub:'Urgent referral',
+      w:'Low SpO₂ or red-flag symptom overrides vibration score.'
+    };
+  }
+  if(S.v.sym && vib >= .45){
+    return {
+      lv:'YELLOW', c:'#F2A93B', t:'Priority clinic follow-up', sub:'Priority follow-up',
+      w:'Cough/vowel vibration elevated with symptomatic presentation.'
+    };
+  }
+  return {
+    lv:'GREEN', c:'#4CD082', t:'Standard symptom protocol', sub:'Standard protocol',
+    w:'No device-based escalation.'
+  };
+}
+
+/* ---------- Web Audio: GitHub Cough, Vowel & Low-dB Background MP3s ---------- */
+const COUGH_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/cough.mp3';
+const VOWEL_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/vowel.mp3';
+const BG_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/background.mp3';
+
+// Low-decibel gain (~ -24 dB relative to full scale: 10^(-24/20) ≈ 0.063)
+const BG_LOW_DB_GAIN = 0.063;
+
+const SFX = {
+  ctx:null, master:null, scoreGain:null, duckGain:null,
+  bgEl:null, bgSource:null, bgBuffer:null, bgLoading:false, bgStarted:false,
+  muted:false, started:false, unlocked:false, vowelActive:false, vowelStopTimer:null,
+  noiseBuf:null, coughBuf:null, coughLoading:false, vowelBuf:null, vowelLoading:false, vowelSrc:null,
+
+  syncUI(){
+    const btn = $('audioBtn'), lbl = $('audioLabel');
+    if(!btn || !lbl) return;
+    btn.classList.toggle('muted', this.muted);
+    btn.classList.toggle('locked', !this.muted && !this.unlocked);
+    lbl.textContent = this.muted ? 'Sound Off' : (this.unlocked ? 'Sound On' : 'Tap for Sound');
+  },
+
+  initBgElement(){
+    if(this.bgEl) return;
+    const el = document.createElement('audio');
+    el.src = BG_URL;
+    el.loop = true;
+    el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    el.muted = this.muted;
+    el.volume = this.muted ? 0 : BG_LOW_DB_GAIN;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    this.bgEl = el;
+
+    const tryPlayEl = () => {
+      if(this.muted || !this.bgEl) return;
+      const p = this.bgEl.play();
+      if(p && typeof p.then === 'function'){
+        p.then(() => {
+          this.unlocked = true;
+          this.bgStarted = true;
+          this.syncUI();
+        }).catch(() => {
+          this.syncUI();
+        });
+      }
+    };
+    this.tryPlayBgEl = tryPlayEl;
+    tryPlayEl();
+  },
+
+  ensure(){
+    try{
+      this.initBgElement();
+      if(this.bgEl){
+        this.bgEl.muted = this.muted;
+        if(!this.muted && this.bgEl.paused && this.tryPlayBgEl){
+          this.tryPlayBgEl();
+        }
+      }
+
+      if(!this.ctx){
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if(!AC) return;
+        this.ctx = new AC();
+        this.master = this.ctx.createGain();
+        this.master.gain.value = this.muted ? 0 : 0.75;
+        this.master.connect(this.ctx.destination);
+
+        this.duckGain = this.ctx.createGain();
+        this.duckGain.gain.value = 1;
+        this.duckGain.connect(this.master);
+
+        this.scoreGain = this.ctx.createGain();
+        this.scoreGain.gain.value = this.muted ? 0.0001 : BG_LOW_DB_GAIN;
+        this.scoreGain.connect(this.duckGain);
+
+        const sr = this.ctx.sampleRate;
+        this.noiseBuf = this.ctx.createBuffer(1, sr * 2, sr);
+        const ch = this.noiseBuf.getChannelData(0);
+        for(let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+      }
+      if(!this.coughBuf && !this.coughLoading){
+        this.loadAudio(COUGH_URL, 'coughBuf', 'coughLoading');
+      }
+      if(!this.vowelBuf && !this.vowelLoading){
+        this.loadAudio(VOWEL_URL, 'vowelBuf', 'vowelLoading');
+      }
+      if(!this.bgBuffer && !this.bgLoading){
+        this.loadAudio(BG_URL, 'bgBuffer', 'bgLoading');
+      }
+      if(this.ctx.state === 'suspended'){
+        const p = this.ctx.resume();
+        if(p && typeof p.then === 'function'){
+          p.then(() => {
+            this.unlocked = (this.ctx.state === 'running');
+            if(this.unlocked && !this.started){
+              this.started = true;
+              this.startScore();
+            }
+            this.syncUI();
+          }).catch(() => {});
+        }
+      }
+      if(this.ctx.state === 'running'){
+        this.unlocked = true;
+      }
+      if(this.unlocked && !this.started){
+        this.started = true;
+        this.startScore();
+      }
+      this.syncUI();
+    }catch(_){}
+  },
+
+  async loadAudio(url, bufKey, flagKey){
+    if(!this.ctx || this[flagKey] || this[bufKey]) return;
+    this[flagKey] = true;
+    try{
+      const res = await fetch(url, {mode:'cors'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const arr = await res.arrayBuffer();
+      this[bufKey] = await this.ctx.decodeAudioData(arr);
+      if(bufKey === 'bgBuffer' && this.unlocked && !this.bgStarted){
+        this.startScore();
+      }
+    }catch(_){
+      // Falls back to background <audio> element or synthesized audio if offline
+    }finally{
+      this[flagKey] = false;
+    }
+  },
+
+  startScore(){
+    if(!this.ctx || !this.scoreGain) return;
+    const now = this.ctx.currentTime;
+    const targetGain = this.muted ? 0.0001 : BG_LOW_DB_GAIN;
+    this.scoreGain.gain.cancelScheduledValues(now);
+    this.scoreGain.gain.setTargetAtTime(targetGain, now, 0.4);
+
+    if(this.bgBuffer && !this.bgStarted){
+      this.bgStarted = true;
+      if(this.bgEl && !this.bgEl.paused){
+        try{ this.bgEl.pause(); }catch(_){}
+      }
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.bgBuffer;
+      src.loop = true;
+      src.connect(this.scoreGain);
+      src.start(now);
+      this.bgSource = src;
+    }else if(this.bgEl && !this.muted && this.tryPlayBgEl){
+      this.tryPlayBgEl();
+    }
+  },
+
+  duck(active){
+    if(this.bgEl){
+      const baseVol = this.muted ? 0 : BG_LOW_DB_GAIN;
+      this.bgEl.volume = active ? baseVol * 0.25 : baseVol;
+    }
+    if(!this.ctx || !this.duckGain) return;
+    const now = this.ctx.currentTime;
+    this.duckGain.gain.cancelScheduledValues(now);
+    this.duckGain.gain.setTargetAtTime(active ? 0.25 : 1.0, now, 0.14);
+  },
+
+  playCough(){
+    this.ensure();
+    if(!this.ctx || !this.master || this.muted || !this.unlocked) return;
+    const now = this.ctx.currentTime;
+    this.duck(true);
+
+    if(this.coughBuf){
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.coughBuf;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(1.15, now);
+      src.connect(g);
+      g.connect(this.master);
+      src.start(now);
+      const durMs = Math.min(3500, Math.max(850, this.coughBuf.duration * 1000));
+      setTimeout(() => { if(!this.vowelActive) this.duck(false); }, durMs);
+      return;
+    }
+
+    setTimeout(() => { if(!this.vowelActive) this.duck(false); }, 950);
+
+    const barks = [
+      {dt:0.00, dur:0.15, f0:175, f1:82, gain:0.65},
+      {dt:0.20, dur:0.17, f0:165, f1:76, gain:0.75},
+      {dt:0.43, dur:0.24, f0:150, f1:68, gain:0.55}
+    ];
+    barks.forEach(b => {
+      const t0 = now + b.dt;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(520, t0);
+      bp.frequency.exponentialRampToValueAtTime(220, t0 + b.dur);
+      bp.Q.value = 1.6;
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.exponentialRampToValueAtTime(b.gain, t0 + 0.018);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + b.dur);
+      src.connect(bp); bp.connect(ng); ng.connect(this.master);
+      src.start(t0); src.stop(t0 + b.dur + 0.02);
+
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(b.f0, t0);
+      osc.frequency.exponentialRampToValueAtTime(b.f1, t0 + b.dur);
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 460;
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(b.gain * 0.55, t0 + 0.015);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + b.dur);
+      osc.connect(lp); lp.connect(og); og.connect(this.master);
+      osc.start(t0); osc.stop(t0 + b.dur + 0.02);
+    });
+  },
+
+  playVowel(sec = 3.6){
+    this.ensure();
+    if(!this.ctx || !this.master || this.muted || !this.unlocked) return;
+    const now = this.ctx.currentTime;
+    this.vowelActive = true;
+    this.duck(true);
+    clearTimeout(this.vowelStopTimer);
+
+    if(this.vowelSrc){
+      try{ this.vowelSrc.stop(); }catch(_){}
+      this.vowelSrc = null;
+    }
+
+    if(this.vowelBuf){
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.vowelBuf;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(1.1, now);
+      src.connect(g);
+      g.connect(this.master);
+      src.start(now);
+      this.vowelSrc = src;
+
+      const playDur = Math.min(sec, this.vowelBuf.duration);
+      if(this.vowelBuf.duration > sec){
+        g.gain.setValueAtTime(1.1, now + sec - 0.25);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + sec);
+        src.stop(now + sec + 0.03);
+      }
+      this.vowelStopTimer = setTimeout(() => {
+        this.vowelActive = false;
+        this.vowelSrc = null;
+        this.duck(false);
+      }, playDur * 1000);
+      return;
+    }
+
+    this.vowelStopTimer = setTimeout(() => {
+      this.vowelActive = false;
+      this.duck(false);
+    }, sec * 1000);
+
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(142, now);
+
+    const vib = this.ctx.createOscillator();
+    const vibG = this.ctx.createGain();
+    vib.frequency.value = 5.2;
+    vibG.gain.value = 2.4;
+    vib.connect(vibG);
+    vibG.connect(osc.frequency);
+
+    const f1 = this.ctx.createBiquadFilter();
+    f1.type = 'bandpass'; f1.frequency.value = 730; f1.Q.value = 4.5;
+    const f2 = this.ctx.createBiquadFilter();
+    f2.type = 'bandpass'; f2.frequency.value = 1090; f2.Q.value = 5.0;
+
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.exponentialRampToValueAtTime(0.26, now + 0.22);
+    env.gain.setValueAtTime(0.24, now + sec - 0.35);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + sec);
+
+    osc.connect(f1); osc.connect(f2);
+    f1.connect(env); f2.connect(env);
+    env.connect(this.master);
+
+    osc.start(now); vib.start(now);
+    osc.stop(now + sec + 0.05); vib.stop(now + sec + 0.05);
+  },
+
+  toggleMute(){
+    this.ensure();
+    if(!this.unlocked){
+      this.muted = false;
+      if(this.bgEl) this.bgEl.muted = false;
+      if(this.tryPlayBgEl) this.tryPlayBgEl();
+      this.syncUI();
+      return;
+    }
+    this.muted = !this.muted;
+    if(this.bgEl){
+      this.bgEl.muted = this.muted;
+      this.bgEl.volume = this.muted ? 0 : BG_LOW_DB_GAIN;
+      if(!this.muted && this.bgEl.paused && !this.bgSource && this.tryPlayBgEl){
+        this.tryPlayBgEl();
+      }
+    }
+    if(this.ctx && this.master){
+      this.master.gain.setTargetAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime, 0.08);
+    }
+    if(this.ctx && this.scoreGain){
+      this.scoreGain.gain.setTargetAtTime(this.muted ? 0.0001 : BG_LOW_DB_GAIN, this.ctx.currentTime, 0.1);
+    }
+    this.syncUI();
+  }
+};
+
+SFX.muted = false;
+SFX.syncUI();
+$('audioBtn').addEventListener('click', () => SFX.toggleMute());
+['pointerdown', 'keydown'].forEach(ev => {
+  window.addEventListener(ev, () => SFX.ensure(), {passive:true});
+});
+
+const R = new THREE.WebGLRenderer({canvas:$('gl'), antialias:true});
+R.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+const sc = new THREE.Scene();
+sc.background = new THREE.Color(0x07130f);
+sc.fog = new THREE.Fog(0x07130f, 14, 34);
+const cam = new THREE.PerspectiveCamera(38, 1, .1, 80);
+
+sc.add(new THREE.HemisphereLight(0xcfeee6, 0x0a1a16, .95));
+const key = new THREE.DirectionalLight(0xffffff, 1.15);
+key.position.set(4, 8, 8);
+sc.add(key);
+const rim = new THREE.PointLight(0x38c4b3, 1.6, 26);
+rim.position.set(-2, 3, -4);
+sc.add(rim);
+
+const grid = new THREE.GridHelper(60, 60, 0x1d4a42, 0x10302a);
+grid.position.y = -4.6;
+sc.add(grid);
+
+const M = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({color:c, roughness:.55, metalness:.1}, o));
+const mesh = (g, m, x = 0, y = 0, z = 0, p) => {
+  const o = new THREE.Mesh(g, m);
+  o.position.set(x, y, z);
+  (p || sc).add(o);
+  return o;
+};
+
+function label(txt, col, w = 3){
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 96;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(7,19,15,.78)';
+  x.beginPath();
+  x.roundRect ? x.roundRect(4, 8, 504, 80, 40) : x.rect(4, 8, 504, 80);
+  x.fill();
+  x.strokeStyle = col;
+  x.lineWidth = 3;
+  x.stroke();
+  x.fillStyle = '#E8F4F0';
+  x.font = '600 34px Hanken Grotesk,sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText(txt, 256, 50);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(c), transparent:true, depthTest:false, opacity:0
+  }));
+  s.scale.set(w, w * 96 / 512, 1);
+  s.renderOrder = 9;
+  sc.add(s);
+  return s;
+}
+
+const teal = M(0x0b8a7d, {roughness:.35});
+const dark = M(0x10201c, {roughness:.4, metalness:.4});
+
+function roundedRectShape(w, h, r){
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+/* ---------- FBX Character Loader (man_character.fbx) ---------- */
+const FALLBACK_FBX = `; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	Material: 100001, "Material::Turban_Crimson", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.6588,0.0863,0.2667
+			P: "SpecularColor", "Color", "", "A",0.1176,0.0588,0.0784
+			P: "Shininess", "double", "", "A",12.00
+		}
+	}
+	Material: 100002, "Material::Tunic_Cream", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.8784,0.8588,0.8078
+			P: "SpecularColor", "Color", "", "A",0.0980,0.0980,0.0863
+			P: "Shininess", "double", "", "A",8.00
+		}
+	}
+	Material: 100003, "Material::Dhoti_OffWhite", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.9098,0.8941,0.8549
+			P: "SpecularColor", "Color", "", "A",0.0863,0.0863,0.0784
+			P: "Shininess", "double", "", "A",8.00
+		}
+	}
+	Material: 100004, "Material::Skin_WarmTan", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.5176,0.3608,0.2667
+			P: "SpecularColor", "Color", "", "A",0.1098,0.0784,0.0627
+			P: "Shininess", "double", "", "A",14.00
+		}
+	}
+	Material: 100005, "Material::Beard_WhiteGrey", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.8314,0.8196,0.8039
+			P: "SpecularColor", "Color", "", "A",0.0588,0.0588,0.0588
+			P: "Shininess", "double", "", "A",6.00
+		}
+	}
+	Material: 100006, "Material::Glasses_Dark", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.1412,0.1412,0.1569
+			P: "SpecularColor", "Color", "", "A",0.3529,0.3529,0.3922
+			P: "Shininess", "double", "", "A",64.00
+		}
+	}
+	Material: 100007, "Material::Cane_TealBlue", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.3059,0.5255,0.5961
+			P: "SpecularColor", "Color", "", "A",0.1373,0.1765,0.1961
+			P: "Shininess", "double", "", "A",24.00
+		}
+	}
+	Material: 100008, "Material::Shoes_Charcoal", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.2824,0.2745,0.2667
+			P: "SpecularColor", "Color", "", "A",0.0980,0.0980,0.0980
+			P: "Shininess", "double", "", "A",16.00
+		}
+	}
+}`;
+
+function buildGeometryFromFBX(verts, poly){
+  const positions = [];
+  let polygonStart = 0;
+
+  for(let i = 0; i < poly.length; i++){
+    const rawIdx = poly[i];
+    const isEnd = rawIdx < 0;
+    const vIdx = isEnd ? (~rawIdx) : rawIdx;
+
+    if(isEnd){
+      const polyLen = i - polygonStart + 1;
+      if(polyLen >= 3){
+        for(let k = 1; k < polyLen - 1; k++){
+          const i0 = poly[polygonStart];
+          const i1 = poly[polygonStart + k];
+          const i2 = vIdx;
+          [i0, i1, i2].forEach(vi => {
+            const base = vi * 3;
+            positions.push(
+              verts[base] || 0,
+              verts[base + 1] || 0,
+              verts[base + 2] || 0
+            );
+          });
+        }
+      }
+      polygonStart = i + 1;
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function parseFBXScene(fbxText){
+  const materials = new Map();
+  const geometries = new Map();
+  const models = new Map();
+  const geomToModel = new Map();
+  const matToModel = new Map();
+
+  const matRe = /Material:\s*(\d+),\s*"Material::([^"]*)",\s*""\s*\{([\s\S]*?)\n\t\}/g;
+  let m;
+  while((m = matRe.exec(fbxText)) !== null){
+    const id = Number(m[1]);
+    const name = m[2];
+    const body = m[3];
+    const colM = /DiffuseColor"[^,]*,\s*([0-9.-]+),([0-9.-]+),([0-9.-]+)/.exec(body);
+    const shinM = /Shininess"[^,]*,\s*([0-9.-]+)/.exec(body);
+    const col = colM
+      ? new THREE.Color(Number(colM[1]), Number(colM[2]), Number(colM[3]))
+      : new THREE.Color(0xcfcfcf);
+    const shin = shinM ? Number(shinM[1]) : 16;
+    materials.set(id, new THREE.MeshStandardMaterial({
+      color: col,
+      roughness: Math.max(0.18, Math.min(0.92, 1.0 - Math.sqrt(shin / 128))),
+      metalness: name.includes('Glasses') ? 0.35 : 0.05,
+      side: THREE.DoubleSide
+    }));
+  }
+
+  const geomRe = /Geometry:\s*(\d+),\s*"Geometry::([^"]*)",\s*"Mesh"\s*\{([\s\S]*?)\n\t\}/g;
+  while((m = geomRe.exec(fbxText)) !== null){
+    const id = Number(m[1]);
+    const name = m[2];
+    const body = m[3];
+    const vM = /Vertices:\s*\*\d+\s*\{\s*a:\s*([\s\S]*?)\}/.exec(body);
+    const pM = /PolygonVertexIndex:\s*\*\d+\s*\{\s*a:\s*([\s\S]*?)\}/.exec(body);
+    const verts = vM ? vM[1].split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n)) : [];
+    const poly = pM ? pM[1].split(',').map(s => Number(s.trim())).filter(n => !Number.isNaN(n)) : [];
+    geometries.set(id, {name, geo: buildGeometryFromFBX(verts, poly)});
+  }
+
+  const modelRe = /Model:\s*(\d+),\s*"Model::([^"]*)",\s*"Mesh"\s*\{([\s\S]*?)\n\t\}/g;
+  while((m = modelRe.exec(fbxText)) !== null){
+    const id = Number(m[1]);
+    const name = m[2];
+    const body = m[3];
+    const tM = /Lcl Translation"[^,]*,\s*([0-9.-]+),([0-9.-]+),([0-9.-]+)/.exec(body);
+    const rM = /Lcl Rotation"[^,]*,\s*([0-9.-]+),([0-9.-]+),([0-9.-]+)/.exec(body);
+    const sM = /Lcl Scaling"[^,]*,\s*([0-9.-]+),([0-9.-]+),([0-9.-]+)/.exec(body);
+    models.set(id, {
+      id,
+      name,
+      pos: tM ? [Number(tM[1]), Number(tM[2]), Number(tM[3])] : [0, 0, 0],
+      rot: rM ? [Number(rM[1]), Number(rM[2]), Number(rM[3])] : [0, 0, 0],
+      scl: sM ? [Number(sM[1]), Number(sM[2]), Number(sM[3])] : [1, 1, 1]
+    });
+  }
+
+  const connRe = /C:\s*"OO",(\d+),(\d+)/g;
+  while((m = connRe.exec(fbxText)) !== null){
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if(geometries.has(a) && models.has(b)) geomToModel.set(a, b);
+    if(materials.has(a) && models.has(b)) matToModel.set(a, b);
+  }
+
+  const root = new THREE.Group();
+  const namedMeshes = {};
+
+  models.forEach((mod, modId) => {
+    const gEntry = Array.from(geometries.entries()).find(([gid]) => geomToModel.get(gid) === modId);
+    if(!gEntry) return;
+    const [, gData] = gEntry;
+    const matEntry = Array.from(materials.entries()).find(([mid]) => matToModel.get(mid) === modId);
+    const mat = matEntry ? matEntry[1] : new THREE.MeshStandardMaterial({color: 0xc5b8a5, roughness: 0.7, side: THREE.DoubleSide});
+
+    const msh = new THREE.Mesh(gData.geo, mat);
+    msh.name = mod.name;
+    msh.position.set(mod.pos[0], mod.pos[1], mod.pos[2]);
+    msh.rotation.set(
+      THREE.MathUtils.degToRad(mod.rot[0]),
+      THREE.MathUtils.degToRad(mod.rot[1]),
+      THREE.MathUtils.degToRad(mod.rot[2])
+    );
+    msh.scale.set(mod.scl[0], mod.scl[1], mod.scl[2]);
+    root.add(msh);
+    namedMeshes[mod.name] = msh;
+  });
+
+  return {root, namedMeshes};
+}
+
+/* ---------- Character Rig Built from man_character.fbx ---------- */
+const fig = new THREE.Group();
+fig.position.set(-4.2, -4.6, 0);
+fig.rotation.y = .45;
+fig.scale.setScalar(3.4);
+sc.add(fig);
+
+const torso = new THREE.Group();
+fig.add(torso);
+
+const headG = new THREE.Group();
+torso.add(headG);
+
+const fbxRig = new THREE.Group();
+fig.add(fbxRig);
+
+const headNames = new Set([
+  'Head', 'Beard_Mustache', 'Glasses_Left', 'Glasses_Right', 'Glasses_Bridge',
+  'Turban_Coil_1', 'Turban_Coil_2', 'Turban_Coil_3', 'Turban_Coil_4', 'Turban_Tail'
+]);
+const torsoNames = new Set([
+  'Tunic_Torso', 'Right_UpperArm', 'Right_Forearm', 'Right_Hand',
+  'Left_UpperArm', 'Left_Forearm', 'Left_Hand'
+]);
+
+function populateCharacterFromFBX(fbxText){
+  while(fbxRig.children.length) fbxRig.remove(fbxRig.children[0]);
+  while(torso.children.length) torso.remove(torso.children[0]);
+  while(headG.children.length) headG.remove(headG.children[0]);
+  torso.add(headG);
+
+  const {root, namedMeshes} = parseFBXScene(fbxText);
+  const children = [...root.children];
+  children.forEach(child => {
+    if(headNames.has(child.name)){
+      headG.add(child);
+    }else if(torsoNames.has(child.name)){
+      torso.add(child);
+    }else{
+      fbxRig.add(child);
+    }
+  });
+
+  /* Neck / Tracheal Piezoelectric Clip positioned at throat between Tunic_Torso and Head */
+  const clipGroup = new THREE.Group();
+  clipGroup.position.set(0, 1.345, 0.068);
+  torso.add(clipGroup);
+
+  const collarClipCurve = new THREE.CatmullRomCurve3([
+    V(-.078, 0, -.02),
+    V(-.085, 0, .025),
+    V(-.052, 0, .065),
+    V(0, 0, .078),
+    V(.052, 0, .065),
+    V(.085, 0, .025),
+    V(.078, 0, -.02)
+  ]);
+  mesh(
+    new THREE.TubeGeometry(collarClipCurve, 28, .009, 10, false),
+    M(0x162420, {roughness:.45, metalness:.25}),
+    0, 0, 0, clipGroup
+  );
+
+  [-1, 1].forEach(q => {
+    mesh(
+      new THREE.BoxGeometry(.022, .045, .028),
+      M(0x1e302b, {roughness:.4, metalness:.3}),
+      q * .082, 0, .008, clipGroup
+    );
+    mesh(
+      new THREE.SphereGeometry(.009, 10, 10),
+      M(0x38c4b3, {roughness:.35}),
+      q * .072, 0, .012, clipGroup
+    );
+  });
+
+  const clipShell = mesh(
+    new THREE.ExtrudeGeometry(roundedRectShape(.072, .056, .012), {
+      depth:.024, bevelEnabled:true, bevelSegments:3, steps:1, bevelSize:.003, bevelThickness:.003
+    }),
+    teal, 0, 0, .078, clipGroup
+  );
+  clipShell.geometry.center();
+  clipShell.position.set(0, 0, .08);
+
+  mesh(new THREE.BoxGeometry(.05, .036, .006), M(0x074d46, {roughness:.5}), 0, 0, .094, clipGroup);
+  mesh(new THREE.SphereGeometry(.006, 10, 10), new THREE.MeshBasicMaterial({color:0x38c4b3}), 0, .012, .098, clipGroup);
+
+  const clipBoot = mesh(new THREE.CylinderGeometry(.009, .012, .042, 12), dark, .028, -.038, .075, clipGroup);
+  clipBoot.rotation.z = .38;
+
+  /* Fingertip Pulse Oximeter attached near Left/Right Hand in FBX rig */
+  const oxGroup = new THREE.Group();
+  const handRef = namedMeshes.Left_Hand || namedMeshes.Right_Hand;
+  if(handRef){
+    oxGroup.position.set(handRef.position.x, handRef.position.y - 0.015, handRef.position.z + 0.035);
+  }else{
+    oxGroup.position.set(0.215, 0.755, 0.065);
+  }
+  torso.add(oxGroup);
+
+  mesh(
+    new THREE.ExtrudeGeometry(roundedRectShape(.075, .034, .01), {
+      depth:.095, bevelEnabled:true, bevelSegments:3, steps:1, bevelSize:.003, bevelThickness:.003
+    }),
+    M(0x1659a8, {roughness:.32, metalness:.15}), 0, .022, .005, oxGroup
+  ).geometry.center();
+  mesh(
+    new THREE.ExtrudeGeometry(roundedRectShape(.072, .026, .009), {
+      depth:.092, bevelEnabled:true, bevelSegments:2, steps:1, bevelSize:.0025, bevelThickness:.0025
+    }),
+    M(0x1f2b36, {roughness:.5, metalness:.2}), 0, -.008, .005, oxGroup
+  ).geometry.center();
+  mesh(new THREE.CylinderGeometry(.0075, .0075, .08, 12), M(0x8e9ba6, {metalness:.85, roughness:.25}), 0, .012, -.042, oxGroup).rotation.z = Math.PI / 2;
+
+  const oledCanvas = document.createElement('canvas');
+  oledCanvas.width = 256; oledCanvas.height = 128;
+  const oxCtx = oledCanvas.getContext('2d');
+  oxCtx.fillStyle = '#051114';
+  oxCtx.fillRect(0, 0, 256, 128);
+  oxCtx.fillStyle = '#38C4B3';
+  oxCtx.font = '700 34px Hanken Grotesk,sans-serif';
+  oxCtx.fillText('SpO₂', 22, 50);
+  oxCtx.fillStyle = '#FF7A70';
+  oxCtx.font = '700 28px Hanken Grotesk,sans-serif';
+  oxCtx.fillText('PR', 22, 98);
+  const oledTex = new THREE.CanvasTexture(oledCanvas);
+  mesh(new THREE.PlaneGeometry(.045, .02), new THREE.MeshBasicMaterial({map:oledTex}), 0, .041, .012, oxGroup).rotation.x = -Math.PI / 2;
+
+  const led = mesh(new THREE.SphereGeometry(.01, 12, 10), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true}), 0, .036, .006, oxGroup);
+  const beam = mesh(new THREE.CylinderGeometry(.0045, .0045, .054, 8), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true, opacity:.6}), 0, .006, .006, oxGroup);
+
+  return {clipMesh: clipGroup, oxGroup, led, beam, chest: namedMeshes.Tunic_Torso || torso};
+}
+
+let {clipMesh, oxGroup, led, beam, chest} = populateCharacterFromFBX(FALLBACK_FBX);
+
+fetch('man_character.fbx')
+  .then(res => res.ok ? res.text() : Promise.reject(new Error('HTTP ' + res.status)))
+  .then(fbxText => {
+    const rebuilt = populateCharacterFromFBX(fbxText);
+    clipMesh = rebuilt.clipMesh;
+    oxGroup = rebuilt.oxGroup;
+    led = rebuilt.led;
+    beam = rebuilt.beam;
+    chest = rebuilt.chest;
+    syncAnchors();
+  })
+  .catch(() => {
+    // Uses embedded FBX fallback when served without local file access
+  });
+
+const rings = [0, 1, 2].map(i => {
+  const r = mesh(new THREE.RingGeometry(.28, .32, 48), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, side:2, depthWrite:false}), -3.95, .78, .48);
+  r.rotation.y = .45;
+  r.userData.o = i / 3;
+  return r;
+});
+const burstRing = mesh(new THREE.RingGeometry(.28, .36, 48), new THREE.MeshBasicMaterial({color:0xff7a70, transparent:true, opacity:0, side:2, depthWrite:false}), -3.93, .78, .52);
+burstRing.rotation.y = .45;
+
+/* ---------- Realistic ESP32-S3 DevKit Module ---------- */
+const eg = new THREE.Group();
+eg.position.set(0, -.2, 0);
+eg.rotation.x = -.5;
+sc.add(eg);
+
+mesh(new THREE.BoxGeometry(2.9, .12, 1.75), M(0x0b332b, {roughness:.45, metalness:.15}), 0, 0, 0, eg);
+mesh(new THREE.BoxGeometry(2.92, .02, 1.77), M(0xd8b04a, {metalness:.85, roughness:.25}), 0, -.05, 0, eg);
+
+const chip = mesh(new THREE.BoxGeometry(.76, .12, .76), M(0x141918, {roughness:.35, metalness:.4}), -.45, .12, .08, eg);
+const chipGlow = mesh(new THREE.PlaneGeometry(.62, .62), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, opacity:.18}), -.45, .185, .08, eg);
+chipGlow.rotation.x = -Math.PI / 2;
+
+/* Procedural silkscreen markings on the ESP32-S3 module PCB */
+const pcbCanvas = document.createElement('canvas');
+pcbCanvas.width = 512; pcbCanvas.height = 320;
+const pcbCtx = pcbCanvas.getContext('2d');
+pcbCtx.fillStyle = '#0b332b';
+pcbCtx.fillRect(0, 0, 512, 320);
+pcbCtx.strokeStyle = 'rgba(216,176,74,0.35)';
+pcbCtx.lineWidth = 3;
+pcbCtx.strokeRect(14, 14, 484, 292);
+pcbCtx.fillStyle = '#cfe8e1';
+pcbCtx.font = '700 26px Hanken Grotesk,sans-serif';
+pcbCtx.fillText('ESP32-S3 DEVKIT', 30, 52);
+pcbCtx.fillStyle = '#8cb5aa';
+pcbCtx.font = '600 17px Hanken Grotesk,sans-serif';
+pcbCtx.fillText('PIEZO IN · PPG IN · USB-C OTG', 30, 286);
+const pcbTex = new THREE.CanvasTexture(pcbCanvas);
+const pcbTop = mesh(new THREE.PlaneGeometry(2.84, 1.68), new THREE.MeshBasicMaterial({map:pcbTex}), 0, .062, 0, eg);
+pcbTop.rotation.x = -Math.PI / 2;
+
+const can = mesh(new THREE.BoxGeometry(1.05, .20, .72), M(0xc7d1ce, {metalness:.88, roughness:.22}), .58, .16, -.30, eg);
+mesh(new THREE.BoxGeometry(.92, .015, .58), M(0x889692, {metalness:.7, roughness:.4}), .58, .265, -.30, eg);
+
+const ant = mesh(new THREE.BoxGeometry(.42, .08, .72), M(0x182220, {roughness:.6}), 1.28, .10, -.30, eg);
+for(let a = 0; a < 4; a++){
+  mesh(new THREE.BoxGeometry(.26, .015, .05), M(0xd8b04a, {metalness:.85}), 1.28, .145, -.52 + a * .14, ant.parent);
+}
+
+for(let i = 0; i < 15; i++){
+  const px = -1.32 + i * .188;
+  mesh(new THREE.BoxGeometry(.055, .14, .055), M(0xd8b04a, {metalness:.85, roughness:.25}), px, .02, .78, eg);
+  mesh(new THREE.BoxGeometry(.055, .14, .055), M(0xd8b04a, {metalness:.85, roughness:.25}), px, .02, -.78, eg);
+}
+
+[-0.85, -0.35].forEach(bx => {
+  mesh(new THREE.BoxGeometry(.22, .08, .22), M(0xbcc6c3, {metalness:.7}), bx, .10, -.52, eg);
+  mesh(new THREE.CylinderGeometry(.055, .055, .06, 14), M(0x1e2624, {roughness:.4}), bx, .15, -.52, eg);
+});
+
+const usbPort = mesh(new THREE.BoxGeometry(.48, .18, .38), M(0xcfd8d5, {metalness:.88, roughness:.22}), 1.52, .12, .28, eg);
+mesh(new THREE.BoxGeometry(.04, .10, .24), M(0x09110f), 1.75, .12, .28, eg);
+mesh(new THREE.BoxGeometry(.16, .12, .28), M(0x16201d, {roughness:.6}), 1.92, .12, .28, eg);
+const eled = mesh(new THREE.SphereGeometry(.055, 12, 10), new THREE.MeshBasicMaterial({color:0x4cd082}), -1.16, .12, -.52, eg);
+
+/* ---------- Realistic Rounded Android Smartphone ---------- */
+const ph = new THREE.Group();
+ph.position.set(4.2, .3, 0);
+ph.rotation.y = -.28;
+sc.add(ph);
+
+const bodyGeo = new THREE.ExtrudeGeometry(roundedRectShape(2.04, 3.96, .24), {
+  depth:.12, bevelEnabled:true, bevelSegments:4, steps:1, bevelSize:.02, bevelThickness:.02
+});
+bodyGeo.center();
+mesh(bodyGeo, M(0x121c19, {roughness:.28, metalness:.78}), 0, 0, 0, ph);
+
+const bezelGeo = new THREE.ShapeGeometry(roundedRectShape(1.94, 3.86, .20));
+mesh(bezelGeo, M(0x050908, {roughness:.18, metalness:.3}), 0, 0, .081, ph);
+
+const pc = document.createElement('canvas');
+pc.width = 540; pc.height = 1120;
+const px = pc.getContext('2d');
+const ptex = new THREE.CanvasTexture(pc);
+ptex.anisotropy = 8;
+
+const scrGeo = new THREE.PlaneGeometry(1.82, 3.74);
+mesh(scrGeo, new THREE.MeshBasicMaterial({map:ptex}), 0, 0, .084, ph);
+
+const punch = mesh(new THREE.CircleGeometry(.032, 16), new THREE.MeshBasicMaterial({color:0x050908}), 0, 1.77, .086, ph);
+punch.renderOrder = 2;
+
+const camIsland = mesh(new THREE.BoxGeometry(.52, .88, .04), M(0x0b1210, {roughness:.22, metalness:.65}), -.48, 1.24, -.09, ph);
+[-.18, .18].forEach(ly => {
+  const lens = mesh(new THREE.CylinderGeometry(.11, .11, .03, 18), M(0x1d2b38, {roughness:.15, metalness:.85}), 0, ly, -.02, camIsland);
+  lens.rotation.x = Math.PI / 2;
+});
+
+/* ---------- Dynamic Wires & Data Packets ---------- */
+const neckCurve = new THREE.CatmullRomCurve3([V(-3.95,.78,.48), V(-3.2,1.0,1.2), V(-2.1,.5,.9), V(-1.35,.1,.5)]);
+const oxCurve = new THREE.CatmullRomCurve3([V(-3.1,-1.85,1.25), V(-2.4,-1.4,1.1), V(-1.8,-.7,.9), V(-1.35,-.15,.45)]);
+const usbCurve = new THREE.CatmullRomCurve3([V(1.45,-.05,.35), V(2.2,.15,.5), V(3.1,.2,.4)]);
+const curves = [{c:neckCurve, col:0x38c4b3}, {c:oxCurve, col:0x6bb1ff}, {c:usbCurve, col:0xf2a93b}];
+const wireMeshes = [], packets = [];
+
+curves.forEach((k, ci) => {
+  const wm = mesh(new THREE.TubeGeometry(k.c, 40, .026, 8), new THREE.MeshBasicMaterial({color:k.col, transparent:true, opacity:.55}));
+  wireMeshes.push(wm);
+  for(let j = 0; j < 4; j++){
+    const p = mesh(new THREE.SphereGeometry(.065, 12, 10), new THREE.MeshBasicMaterial({color:k.col}));
+    p.userData = {k:k.c, o:j / 4 + ci * .1, s:ci === 2 ? .35 : .25};
+    packets.push(p);
+  }
+});
+
+const tmpNeck = V(), tmpOx = V(), tmpUsb = V();
+function syncAnchors(){
+  if(!clipMesh || !oxGroup) return;
+  sc.updateMatrixWorld(true);
+  clipMesh.getWorldPosition(tmpNeck);
+  rings.forEach(r => r.position.copy(tmpNeck));
+  burstRing.position.copy(tmpNeck);
+  neckCurve.points[0].copy(tmpNeck);
+  wireMeshes[0].geometry.dispose();
+  wireMeshes[0].geometry = new THREE.TubeGeometry(neckCurve, 40, .026, 8);
+
+  oxGroup.getWorldPosition(tmpOx);
+  oxCurve.points[0].copy(tmpOx);
+  wireMeshes[1].geometry.dispose();
+  wireMeshes[1].geometry = new THREE.TubeGeometry(oxCurve, 40, .026, 8);
+
+  usbPort.getWorldPosition(tmpUsb);
+  usbCurve.points[0].copy(tmpUsb);
+  wireMeshes[2].geometry.dispose();
+  wireMeshes[2].geometry = new THREE.TubeGeometry(usbCurve, 40, .026, 8);
+}
+syncAnchors();
+
+/* ---------- Floating Labels ---------- */
+const LB = [
+  label('Tracheal piezo clip', '#38C4B3', 2.7),
+  label('Fingertip oximeter', '#6BB1FF', 2.7),
+  label('ESP32-S3 · filter + SQI', '#38C4B3', 3.1),
+  label('Offline Android phone', '#F2A93B', 3)
+];
+LB[0].position.set(-4, 1.35, .9);
+LB[1].position.set(-3.4, -1.15, 1.35);
+LB[2].position.set(0, 1.75, .6);
+LB[3].position.set(4.1, 2.55, .8);
+const usb = label('USB-C OTG', '#F2A93B', 1.8);
+usb.position.set(2.3, .75, .4);
+
+/* ---------- Realistic Android Screen UI ---------- */
+function roundBox(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+}
+
+function drawPhoneLogo(ctx, cx, cy, size){
+  const s = size / 36;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.strokeStyle = '#0F8A7D';
+  ctx.lineWidth = 2.8;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.arc(18, 18, 12, Math.PI * 1.16, Math.PI * 1.84);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(5.5, 18.5);
+  ctx.lineTo(12.2, 18.5);
+  ctx.lineTo(15.4, 13.2);
+  ctx.lineTo(19.6, 23.4);
+  ctx.lineTo(23.1, 16.5);
+  ctx.lineTo(30.5, 16.5);
+  ctx.stroke();
+
+  ctx.fillStyle = '#0F8A7D';
+  ctx.beginPath();
+  ctx.arc(28, 26.5, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawPhone(d, showRes, prog){
+  const x = px, W = 540, H = 1120;
+  x.fillStyle = '#F3F8F6';
+  x.fillRect(0, 0, W, H);
+
+  x.fillStyle = '#0F2420';
+  x.font = '700 20px Hanken Grotesk,sans-serif';
+  x.fillText('09:41', 34, 42);
+  x.textAlign = 'right';
+  x.fillText('OFFLINE · 100%', W - 34, 42);
+  x.textAlign = 'left';
+
+  drawPhoneLogo(x, 34, 70, 38);
+  x.fillStyle = '#0F2420';
+  x.font = '800 38px Bricolage Grotesque,sans-serif';
+  x.fillText('RespiTriage', 80, 101);
+
+  roundBox(x, 34, 118, 286, 34, 17);
+  x.fillStyle = '#DFF1EC';
+  x.fill();
+  x.fillStyle = '#0B7A6E';
+  x.font = '700 18px Hanken Grotesk,sans-serif';
+  x.fillText('● LiteRT Local · USB-C Connected', 48, 141);
+
+  roundBox(x, 30, 174, W - 60, 186, 24);
+  x.fillStyle = '#FFFFFF';
+  x.fill();
+  x.strokeStyle = '#DCE8E4';
+  x.lineWidth = 2;
+  x.stroke();
+
+  const metrics = [
+    ['SpO₂ Oxygen', Math.round(S.v.spo2) + '%', S.v.spo2 < 92 ? '#C62828' : '#0F2420'],
+    ['Pulse Rate', Math.round(S.v.hr) + ' bpm', '#0F2420'],
+    ['Signal Quality (SQI)', '0.91 · Verified', '#1B7F46']
+  ];
+  metrics.forEach(([k, v, col], idx) => {
+    const ry = 222 + idx * 54;
+    x.fillStyle = '#536B65';
+    x.font = '500 23px Hanken Grotesk,sans-serif';
+    x.fillText(k, 56, ry);
+    x.textAlign = 'right';
+    x.fillStyle = col;
+    x.font = '700 26px Hanken Grotesk,sans-serif';
+    x.fillText(v, W - 56, ry);
+    x.textAlign = 'left';
+  });
+
+  x.fillStyle = '#3B524C';
+  x.font = '600 22px Hanken Grotesk,sans-serif';
+  x.fillText(prog >= 1 ? 'Screening complete' : prog > 0 ? 'Running on-device inference…' : 'Ready · 30 s capture', 34, 412);
+  roundBox(x, 34, 430, W - 72, 16, 8);
+  x.fillStyle = '#D6E4DF';
+  x.fill();
+  if(prog > 0){
+    roundBox(x, 34, 430, Math.max(16, (W - 72) * prog), 16, 8);
+    x.fillStyle = '#0F8A7D';
+    x.fill();
+  }
+
+  const bg = {RED:'#FDE7E5', YELLOW:'#FFF2D8', GREEN:'#E3F5EB'}[d.lv];
+  const fg = {RED:'#C62828', YELLOW:'#B26A00', GREEN:'#1B7F46'}[d.lv];
+  roundBox(x, 30, 480, W - 60, 390, 28);
+  x.fillStyle = showRes ? bg : '#E8F0ED';
+  x.fill();
+  x.strokeStyle = showRes ? fg : '#C5D4CF';
+  x.lineWidth = 5;
+  x.stroke();
+
+  x.textAlign = 'center';
+  if(showRes){
+    x.fillStyle = fg;
+    x.font = '800 94px Bricolage Grotesque,sans-serif';
+    x.fillText(d.lv, W / 2, 626);
+    x.font = '700 32px Hanken Grotesk,sans-serif';
+    x.fillText(d.sub, W / 2, 692);
+    x.fillStyle = '#18302B';
+    x.font = '500 22px Hanken Grotesk,sans-serif';
+    x.fillText(d.w.length > 36 ? d.w.slice(0, 34) + '…' : d.w, W / 2, 754);
+  }else{
+    x.fillStyle = '#4A625C';
+    x.font = '800 54px Bricolage Grotesque,sans-serif';
+    x.fillText(prog > 0 ? 'Analysing…' : 'Ready', W / 2, 668);
+  }
+  x.textAlign = 'left';
+
+  roundBox(x, 30, 916, W - 60, 74, 22);
+  x.fillStyle = showRes ? '#0F2420' : '#CBD9D4';
+  x.fill();
+  x.fillStyle = showRes ? '#E8F4F0' : '#5E756F';
+  x.font = '700 24px Hanken Grotesk,sans-serif';
+  x.textAlign = 'center';
+  x.fillText(showRes ? 'Save Offline Case Log' : 'Awaiting Sensor Capture', W / 2, 961);
+  x.textAlign = 'left';
+
+  roundBox(x, W / 2 - 75, H - 24, 150, 6, 3);
+  x.fillStyle = '#9BB0AA';
+  x.fill();
+
+  ptex.needsUpdate = true;
+}
+
+/* ---------- HUD Waves ---------- */
+function wave(id, t, kind){
+  const c = $(id), r = c.getBoundingClientRect(), dp = Math.min(devicePixelRatio || 1, 2);
+  if(c.width !== Math.round(r.width * dp)){
+    c.width = Math.round(r.width * dp);
+    c.height = Math.round(r.height * dp);
+  }
+  const x = c.getContext('2d'), w = c.width, h = c.height;
+  x.clearRect(0, 0, w, h);
+  x.lineWidth = 2 * dp;
+  x.beginPath();
+  if(kind === 'pz'){
+    const boost = S.burst > 0 ? 1.65 : SFX.vowelActive ? 1.35 : 1;
+    const amp = Math.min(h * .44, (.15 + S.v.vib * .75) * h * .34 * boost);
+    x.strokeStyle = S.v.vib >= .45 ? '#F2A93B' : '#38C4B3';
+    for(let i = 0; i < w; i += 2){
+      const y = h / 2 + Math.sin(i * .05 / dp - t * 8) * amp * (.65 + .35 * Math.sin(i * .012 / dp - t * 3));
+      i ? x.lineTo(i, y) : x.moveTo(i, y);
+    }
+  }else{
+    const bf = S.v.hr / 60 * Math.PI * 2, a = (S.v.spo2 < 92 ? .26 : .38) * h;
+    x.strokeStyle = S.v.spo2 < 92 ? '#FF7A70' : '#6BB1FF';
+    for(let i = 0; i < w; i += 2){
+      const p = i / dp / 60 * Math.PI * 2 - t * bf * .45;
+      const y = h * .86 - (Math.pow(Math.max(0, Math.sin(p)), 3) + .28 * Math.pow(Math.max(0, Math.sin(p - .85)), 4)) * a;
+      i ? x.lineTo(i, y) : x.moveTo(i, y);
+    }
+  }
+  x.stroke();
+}
+
+/* ---------- Inside the ESP32-S3 Overlay ---------- */
+function drawChip(T){
+  const c = $('chip');
+  if(S.i !== 4 && +c.style.opacity === 0) return;
+  const r = c.getBoundingClientRect(), dp = Math.min(devicePixelRatio || 1, 2);
+  if(c.width !== Math.round(r.width * dp)){
+    c.width = Math.round(r.width * dp);
+    c.height = Math.round(r.height * dp);
+  }
+  const x = c.getContext('2d'), W = c.width / dp, H = c.height / dp;
+  x.setTransform(dp, 0, 0, dp, 0, 0);
+  x.clearRect(0, 0, W, H);
+  x.fillStyle = '#E8F4F0';
+  x.font = '700 20px Bricolage Grotesque,sans-serif';
+  x.fillText('Inside the ESP32-S3', 22, 34);
+  x.fillStyle = '#9CB8B0';
+  x.font = '500 13px Hanken Grotesk,sans-serif';
+  x.fillText('Neck vibration and pulse signals, processed on the module', 22, 54);
+
+  const N = 4, pad = 22, gap = 26, cw = (W - pad * 2 - gap * (N - 1)) / N, top = 80, bh = 130;
+  const names = ['Raw input', 'Band-pass filter', '12-bit ADC', 'Signal quality'];
+  const noise = u => Math.sin(u * 37 + T * 9) * .35 + Math.sin(u * 91 - T * 13) * .2 + Math.sin(u * 17 + T * 5) * .15;
+  const clean = u => Math.sin(u * Math.PI * 6 - T * 6) * (.6 + .2 * Math.sin(u * 3 - T));
+
+  for(let s = 0; s < N; s++){
+    const bx = pad + s * (cw + gap);
+    x.globalAlpha = Math.min(1, Math.max(0, (S.t - 600 - s * 1400) / 500));
+    x.fillStyle = 'rgba(56,196,179,.08)';
+    x.strokeStyle = 'rgba(56,196,179,.5)';
+    x.lineWidth = 1.5;
+    x.beginPath();
+    x.rect(bx, top, cw, bh);
+    x.fill();
+    x.stroke();
+
+    if(s < 3){
+      x.beginPath();
+      x.lineWidth = 2;
+      x.strokeStyle = ['#F2A93B', '#38C4B3', '#6BB1FF'][s];
+      for(let i = 0; i <= cw; i += 2){
+        const u = i / cw;
+        let v = clean(u) + (s === 0 ? noise(u) * 1.1 : s === 1 ? noise(u) * .08 : 0);
+        if(s === 2) v = Math.round(v * 5) / 5;
+        const y = top + bh / 2 - v * bh * .33;
+        i ? x.lineTo(bx + i, y) : x.moveTo(bx + i, y);
+      }
+      x.stroke();
+    }else{
+      const q = .86 + .06 * Math.sin(T * 1.7), mx = bx + cw / 2;
+      x.fillStyle = 'rgba(156,184,176,.25)';
+      x.fillRect(bx + 14, top + bh - 34, cw - 28, 10);
+      x.fillStyle = '#4CD082';
+      x.fillRect(bx + 14, top + bh - 34, (cw - 28) * q, 10);
+      x.beginPath();
+      x.arc(mx, top + 40, 18, 0, 7);
+      x.fill();
+      x.strokeStyle = '#07130F';
+      x.lineWidth = 4;
+      x.beginPath();
+      x.moveTo(mx - 8, top + 40);
+      x.lineTo(mx - 2, top + 47);
+      x.lineTo(mx + 9, top + 33);
+      x.stroke();
+      x.fillStyle = '#E8F4F0';
+      x.font = '600 13px Hanken Grotesk,sans-serif';
+      x.textAlign = 'center';
+      x.fillText('SQI ' + q.toFixed(2) + ' · pass', mx, top + bh - 46);
+      x.textAlign = 'left';
+    }
+
+    x.fillStyle = '#E8F4F0';
+    x.font = '600 13px Hanken Grotesk,sans-serif';
+    x.textAlign = 'center';
+    x.fillText(names[s], bx + cw / 2, top + bh + 22);
+    x.textAlign = 'left';
+
+    if(s < N - 1){
+      x.fillStyle = '#38C4B3';
+      for(let j = 0; j < 3; j++){
+        const u = (T * .8 + j / 3) % 1;
+        x.beginPath();
+        x.arc(bx + cw + u * gap, top + bh / 2, 3, 0, 7);
+        x.fill();
+      }
+    }
+  }
+
+  x.globalAlpha = Math.min(1, Math.max(0, (S.t - 6600) / 600));
+  const py = top + bh + 62;
+  x.fillStyle = '#9CB8B0';
+  x.font = '500 13px Hanken Grotesk,sans-serif';
+  x.fillText('Clean packets → USB-C OTG → phone', pad, py);
+  for(let j = 0; j < 14; j++){
+    const u = (T * .5 + j / 14) % 1;
+    x.fillStyle = '#F2A93B';
+    x.save();
+    x.globalAlpha = Math.min(1, Math.max(0, (S.t - 6600) / 600)) * Math.sin(u * Math.PI);
+    x.fillRect(pad + u * (W - pad * 2 - 16), py + 14, 16, 10);
+    x.restore();
+  }
+  x.globalAlpha = 1;
+}
+
+/* ---------- Director ---------- */
+let capSwapTimer = null;
+
+function renderCaption(s){
+  clearTimeout(capSwapTimer);
+  const cp = $('cap'), beatBox = $('reelBeat');
+  if(s.end){
+    cp.style.display = 'none';
+    return;
+  }
+  cp.style.display = 'block';
+  cp.classList.remove('show');
+  cp.classList.add('out');
+  capSwapTimer = setTimeout(() => {
+    $('ck').textContent = s.k || '';
+    $('ct').textContent = s.t || '';
+    $('cx').textContent = s.x || '';
+    beatBox.innerHTML = (s.beats || [])
+      .map((b, idx) => `<span data-b="${idx}" class="${b.cls || ''}">${b.text}</span>`)
+      .join('');
+    cp.classList.remove('out');
+    void cp.offsetWidth;
+    cp.classList.add('show');
+  }, 140);
+}
+
+function go(i){
+  i = Math.max(0, Math.min(SC.length - 1, i));
+  const s = SC[i];
+  S.i = i;
+  S.t = 0;
+  S.burst = 0;
+  S.firedCoughs.clear();
+  S.firedVowel = false;
+  S.firedBeats.clear();
+
+  if(s.v === LOW || i === SC.length - 1) S.sym = 1;
+  S.tgt = s.v;
+
+  renderCaption(s);
+  $('end').classList.toggle('on', !!s.end);
+  if(i <= 5) S.scan = 0;
+}
+
+const camP = V(...SC[0].cam), camL = V(...SC[0].look), tp = V(), tl = V();
+let last = performance.now(), lblA = [0, 0, 0, 0, 0];
+
+function size(){
+  const w = innerWidth, h = innerHeight;
+  R.setSize(w, h, false);
+  cam.aspect = w / h;
+  const s = Math.max(1, (16 / 9) / (w / h));
+  cam.fov = 38 * Math.min(1.45, s);
+  cam.updateProjectionMatrix();
+}
+addEventListener('resize', size);
+size();
+
+function frame(now){
+  const dt = Math.min(.1, (now - last) / 1000);
+  last = now;
+  const T = now / 1000;
+  const s = SC[S.i];
+
+  if(!S.pause){
+    S.t += dt * 1000;
+    if(S.t >= s.d && S.i < SC.length - 1) go(S.i + 1);
+  }
+
+  /* Trigger Reels keyword pills */
+  if(s.beats){
+    s.beats.forEach((b, idx) => {
+      if(S.t >= b.at && !S.firedBeats.has(idx)){
+        S.firedBeats.add(idx);
+        const pill = $('reelBeat').querySelector(`[data-b="${idx}"]`);
+        if(pill) pill.classList.add('pop');
+      }
+    });
+  }
+
+  /* Trigger acoustic events (cough bursts + 10s vowel) */
+  let kc = 0;
+  if(!S.pause && s.coughAt){
+    s.coughAt.forEach((tMark, idx) => {
+      if(S.t >= tMark && !S.firedCoughs.has(idx)){
+        S.firedCoughs.add(idx);
+        SFX.playCough();
+      }
+      const elapsed = S.t - tMark;
+      if(elapsed >= 0 && elapsed < 780){
+        kc = Math.max(kc, Math.sin(elapsed / 780 * Math.PI));
+      }
+    });
+  }
+
+  let vowelProgress = 0;
+  if(!S.pause && typeof s.vowelAt === 'number'){
+    if(S.t >= s.vowelAt && !S.firedVowel){
+      S.firedVowel = true;
+      SFX.playVowel(3.6);
+    }
+    const vElapsed = S.t - s.vowelAt;
+    if(vElapsed >= 0 && vElapsed <= 3600){
+      vowelProgress = vElapsed / 3600;
+    }
+  }
+
+  /* Update live acoustic badge */
+  const voxTag = $('voxTag'), voxText = $('voxText'), voxBar = $('voxBar');
+  if(kc > 0.05){
+    voxTag.className = 'on cough';
+    voxText.textContent = 'Cough Burst Detected';
+    voxBar.style.width = Math.round(kc * 100) + '%';
+  }else if(vowelProgress > 0){
+    voxTag.className = 'on vowel';
+    const simSec = Math.min(10, Math.max(1, Math.ceil(vowelProgress * 10)));
+    voxText.textContent = `Sustained Vowel /aː/ · ${simSec}s / 10s`;
+    voxBar.style.width = Math.round(vowelProgress * 100) + '%';
+  }else{
+    voxTag.classList.remove('on');
+  }
+
+  /* Vitals tween */
+  const k = 1 - Math.exp(-dt * 3);
+  for(const q of ['spo2', 'hr', 'vib']) S.v[q] += (S.tgt[q] - S.v[q]) * k;
+
+  /* Scan progress */
+  let prog = S.i < 5 ? 0 : S.i > 6 ? 1 : null;
+  if(s.scan) prog = Math.max(0, Math.min(1, (S.t - s.scan[0]) / s.scan[1]));
+  if(prog === null) prog = 1;
+  S.pr = prog;
+
+  /* Camera */
+  tp.set(...s.cam);
+  tl.set(...s.look);
+  const ck = 1 - Math.exp(-dt * 1.6);
+  camP.lerp(tp, ck);
+  camL.lerp(tl, ck);
+  cam.position.set(camP.x + Math.sin(T * .35) * .18, camP.y + Math.sin(T * .27) * .1, camP.z);
+  cam.lookAt(camL);
+
+  /* Animate patient & sensors */
+  const vib = S.v.vib;
+  const activeStim = Math.max(kc, vowelProgress > 0 ? .65 : 0);
+  rings.forEach(r => {
+    const u = (T * .7 + r.userData.o) % 1;
+    r.scale.setScalar(.35 + u * (1.2 + activeStim * .5));
+    r.material.opacity = (1 - u) * (.3 + vib * .7) * (s.f === 0 ? 1 : .45);
+  });
+
+  torso.rotation.x = .03 + Math.sin(T * 1.6) * .018 + kc * .13;
+  headG.rotation.x = -.04 + kc * .16 - (vowelProgress > 0 ? .04 : 0);
+  if(chest){
+    chest.scale.set(1 + kc * .045, 1 + Math.sin(T * 1.6) * .015, 1 + Math.sin(T * 1.6) * .03 + kc * .06);
+  }
+  burstRing.material.opacity = .9 * kc;
+  burstRing.scale.setScalar(.35 + kc * 1.25);
+  S.burst = kc > .05 ? 1 : 0;
+
+  /* ESP32-S3 showcase tilt & exploded view */
+  const focusEsp = (s.f === 2 || s.f === 4) ? 1 : 0;
+  S.espFocus = (S.espFocus || 0) + (focusEsp - (S.espFocus || 0)) * k;
+  S.ex = (S.ex || 0) + (((s.f === 4) ? 1 : 0) - (S.ex || 0)) * k;
+
+  eg.rotation.x = -.5 + S.espFocus * .78;
+  eg.rotation.y = Math.sin(T * .55) * .14 + S.espFocus * .22;
+  eg.rotation.z = Math.sin(T * .4) * .04 * S.espFocus;
+  eg.position.y = -.2 + S.espFocus * .28;
+
+  chip.position.y = .12 + S.ex * .55;
+  chipGlow.position.y = .185 + S.ex * .55;
+  chipGlow.material.opacity = .18 + S.ex * (.35 + .2 * Math.sin(T * 6));
+  can.position.y = .16 + S.ex * 1.05;
+  ant.position.y = .10 + S.ex * .35;
+  eled.visible = Math.sin(T * 8) > -.3;
+
+  syncAnchors();
+
+  if(led) led.material.opacity = .6 + Math.sin(T * 10) * .4;
+  if(beam) beam.material.opacity = .35 + Math.abs(Math.sin(T * 5.2 * S.v.hr / 74)) * .5;
+  packets.forEach(p => {
+    const u = (T * p.userData.s + p.userData.o) % 1;
+    p.position.copy(p.userData.k.getPoint(u));
+    p.scale.setScalar(.6 + Math.sin(u * Math.PI) * .8);
+  });
+
+  ph.rotation.y = -.28 + Math.sin(T * .4) * .05;
+
+  /* Labels */
+  const show = [s.f === 0, s.f === 1, s.f === 2 || s.f === 3, s.f === 3, s.f === 2];
+  [LB[0], LB[1], LB[2], LB[3], usb].forEach((l, i) => {
+    lblA[i] += ((show[i] ? 1 : 0) - lblA[i]) * k;
+    l.material.opacity = lblA[i];
+  });
+
+  /* Verdict & HUD */
+  const d = decide(), showRes = prog >= 1 && S.i >= 5 && S.i < 7;
+  drawPhone(d, showRes, prog);
+  const v = $('ver');
+  v.classList.toggle('on', S.i >= 5 && S.i < 7);
+  if(showRes || S.i >= 5){
+    const col = prog >= 1 ? d.c : '#9CB8B0';
+    v.style.setProperty('--lv', col);
+    v.style.setProperty('--lvbg', col + '22');
+    $('vp').textContent = prog >= 1 ? d.lv : 'ANALYSING';
+    $('vt').textContent = prog >= 1 ? d.t : 'Reading both sensors…';
+    $('vw').textContent = prog >= 1 ? d.w : 'Local model running offline.';
+  }
+  $('l1').textContent = vib >= .45 ? 'Elevated' : 'Baseline';
+  $('l1').style.color = vib >= .45 ? '#F2A93B' : '#38C4B3';
+  $('l2').textContent = `SpO₂ ${Math.round(S.v.spo2)}% · ${Math.round(S.v.hr)} bpm`;
+  $('l2').style.color = S.v.spo2 < 92 ? '#FF7A70' : '#6BB1FF';
+  $('hud').style.opacity = S.i > 0 && S.i < 7 && S.i !== 4 ? 1 : 0;
+
+  wave('c1', T, 'pz');
+  wave('c2', T, 'pp');
+  $('chip').style.opacity = S.i === 4 ? 1 : 0;
+  drawChip(T);
+
+  document.querySelectorAll('#prog b').forEach((b, i) => {
+    b.style.width = (i < S.i ? 100 : i === S.i ? Math.min(100, S.t / s.d * 100) : 0) + '%';
+  });
+
+  R.render(sc, cam);
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Controls ---------- */
+let idleT;
+const wake = () => {
+  document.body.classList.remove('idle');
+  clearTimeout(idleT);
+  idleT = setTimeout(() => document.body.classList.add('idle'), 2200);
+};
+addEventListener('mousemove', wake);
+wake();
+
+addEventListener('keydown', e => {
+  if(e.code === 'Space'){
+    e.preventDefault();
+    S.pause = !S.pause;
+  }else if(e.code === 'ArrowRight'){
+    go(S.i + 1);
+  }else if(e.code === 'ArrowLeft'){
+    go(S.i - 1);
+  }else if(e.key === 'r' || e.key === 'R'){
+    S.v = {...SYM};
+    go(0);
+  }else if(e.key === 'f' || e.key === 'F'){
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }else if(e.key === 'm' || e.key === 'M'){
+    SFX.toggleMute();
+  }else if(e.key === 'h' || e.key === 'H'){
+    document.body.classList.toggle('clean');
+  }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  go(0);
+  SFX.ensure();
+  requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>
+```[cite: 1, 2]
