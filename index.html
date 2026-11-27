@@ -39,12 +39,17 @@ body.idle{cursor:none}
   font-weight:800;
   font-size:22px;
 }
-#brand i{
-  width:14px;
-  height:14px;
-  border-radius:50%;
-  background:var(--acc);
-  box-shadow:0 0 18px var(--acc);
+.rt-mark{
+  width:30px;
+  height:30px;
+  flex:0 0 auto;
+  color:var(--acc);
+  filter:drop-shadow(0 0 10px rgba(56,196,179,.28));
+}
+.rt-mark--lg{
+  width:46px;
+  height:46px;
+  color:var(--acc);
 }
 #brand small{font:400 14px 'Hanken Grotesk',sans-serif;color:var(--mute);margin-left:6px}
 
@@ -240,6 +245,7 @@ body.idle{cursor:none}
   z-index:14;
   display:grid;
   place-content:center;
+  justify-items:center;
   text-align:center;
   gap:22px;
   background:radial-gradient(ellipse at center,rgba(7,19,15,.55),rgba(7,19,15,.92));
@@ -249,6 +255,15 @@ body.idle{cursor:none}
   padding:24px;
 }
 #end.on{opacity:1}
+.end-brand{
+  display:inline-flex;
+  align-items:center;
+  gap:12px;
+  font-weight:800;
+  font-size:20px;
+  letter-spacing:.01em;
+  color:var(--ink);
+}
 #end h2{margin:0;font-size:clamp(34px,6vw,84px);font-weight:800;letter-spacing:-.03em;line-height:1}
 #end .st{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
 #end .st span{border:1px solid rgba(56,196,179,.5);border-radius:99px;padding:8px 18px;font-weight:600}
@@ -292,7 +307,11 @@ body.clean #hint,body.clean #brand small{display:none}
 </head>
 <body class="clean">
 <canvas id="gl"></canvas>
-<div id="brand" class="h"><i></i>RespiTriage<small>Simulated demo · all values are illustrative</small></div>
+<div id="brand" class="h">
+  <span id="brandLogo"></span>
+  <span>RespiTriage</span>
+  <small>Simulated demo · all values are illustrative</small>
+</div>
 <button id="audioBtn" type="button" aria-label="Toggle audio and score">
   <span class="eq" aria-hidden="true"><span></span><span></span><span></span></span>
   <span id="audioLabel">Sound On</span>
@@ -315,6 +334,7 @@ body.clean #hint,body.clean #brand small{display:none}
 </div>
 <canvas id="chip" aria-label="Animated view inside the ESP32-S3 module"></canvas>
 <div id="end">
+  <div class="end-brand h"><span id="endLogo"></span><span>RespiTriage</span></div>
   <h2 class="h">Triage in a village,<br>without a signal.</h2>
   <div class="st"><span>~₹1,500 per unit</span><span>~₹0.50 per screening</span><span>100% offline</span></div>
   <small>RespiTriage is a clinical decision-support aid for ASHA workers. It is not a diagnosis and does not replace clinical judgment or confirmatory lab testing.</small>
@@ -326,6 +346,19 @@ body.clean #hint,body.clean #brand small{display:none}
 <script>
 const $ = id => document.getElementById(id);
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/* ---------- Geometric Brand Mark (Collar Arc + Signal Wave + Status Node) ---------- */
+function brandMarkSVG(variant = ''){
+  const cls = variant ? `rt-mark rt-mark--${variant}` : 'rt-mark';
+  return `<svg class="${cls}" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+    <path d="M8 10.5A12 12 0 0 1 28 10.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M5.5 18.5H12.2L15.4 13.2L19.6 23.4L23.1 16.5H30.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="28" cy="26.5" r="3.2" fill="currentColor"/>
+  </svg>`;
+}
+
+$('brandLogo').innerHTML = brandMarkSVG('');
+$('endLogo').innerHTML = brandMarkSVG('lg');
 
 /* ---------- story & reels beats ---------- */
 const SYM = {spo2:96, hr:88, vib:.72, sym:1, flag:0};
@@ -397,70 +430,128 @@ const SC = [
     x:'SpO₂ below 92% turns the result RED at once, whatever the vibration score says. Red-flag symptoms do the same.',
     cam:[3.4,.7,5.2], look:[4.1,.3,0], v:LOW, f:3, scan:[2600,2400],
     beats:[
-      {at:600, text:'SpO₂ < 92% OVERRIDE', cls:'cough-pill'},
-      {at:5000, text:'RED · URGENT', cls:'cough-pill'}
+      {at:450, text:'SpO₂ < 92%', cls:'cough-pill'},
+      {at:2750, text:'RED · URGENT CARE', cls:'cough-pill'}
     ]
   },
   {
-    d:6500, k:'', t:'', x:'',
-    cam:[0,.9,16], look:[0,-.2,0], v:LOW, end:1
+    d:7200, end:1, cam:[0,1.2,13.5], look:[0,0,0], v:LOW
   }
 ];
 
 const S = {
-  i:0, t:0, pause:false, scan:0, burst:0, ex:0, pr:0,
-  v:{...SYM}, tgt:{...SYM}, sym:1, flag:0,
-  firedCoughs:new Set(), firedVowel:false, firedBeats:new Set()
+  i:0,
+  t:0,
+  pause:false,
+  v:{...SYM},
+  tgt:{...SYM},
+  sym:1,
+  burst:0,
+  pr:0,
+  espFocus:0,
+  ex:0,
+  firedCoughs:new Set(),
+  firedVowel:false,
+  firedBeats:new Set()
 };
 
-$('prog').innerHTML = SC.map(() => '<i><b></b></i>').join('');
-
 function decide(){
-  const sp = Math.round(S.v.spo2), vb = S.v.vib, low = sp < 92, hit = S.sym && vb >= .45;
-  if(S.flag || low) return {
-    lv:'RED', c:'#FF7A70', t:'Urgent clinical referral', sub:'Urgent referral',
-    w:S.flag ? 'Red-flag signs reported.' : `SpO₂ ${sp}% is below the 92% line.`
-  };
-  if(hit) return {
-    lv:'YELLOW', c:'#F2A93B', t:'Diagnostic referral recommended', sub:'Refer for tests',
-    w:`Symptomatic, vibration score ${vb.toFixed(2)} (line is 0.45).`
-  };
+  const spo2 = S.v.spo2;
+  const vib = S.v.vib;
+  if(spo2 < 92 || S.v.flag){
+    return {
+      lv:'RED', c:'#FF7A70', t:'Urgent PHC / hospital referral', sub:'Urgent referral',
+      w:'Low SpO₂ or red-flag symptom overrides vibration score.'
+    };
+  }
+  if(S.v.sym && vib >= .45){
+    return {
+      lv:'YELLOW', c:'#F2A93B', t:'Priority clinic follow-up', sub:'Priority follow-up',
+      w:'Cough/vowel vibration elevated with symptomatic presentation.'
+    };
+  }
   return {
     lv:'GREEN', c:'#4CD082', t:'Standard symptom protocol', sub:'Standard protocol',
     w:'No device-based escalation.'
   };
 }
 
-/* ---------- Web Audio: Cough, 10s Vowel, & Ambient Score ---------- */
+/* ---------- Web Audio: GitHub Cough, Vowel & Low-dB Background MP3s ---------- */
+const COUGH_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/cough.mp3';
+const VOWEL_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/vowel.mp3';
+const BG_URL = 'https://raw.githubusercontent.com/athharvnm/respitriage/main/audio/background.mp3';
+
+// Low-decibel gain (~ -24 dB relative to full scale: 10^(-24/20) ≈ 0.063)
+const BG_LOW_DB_GAIN = 0.063;
+
 const SFX = {
   ctx:null, master:null, scoreGain:null, duckGain:null,
+  bgEl:null, bgSource:null, bgBuffer:null, bgLoading:false, bgStarted:false,
   muted:false, started:false, unlocked:false, vowelActive:false, vowelStopTimer:null,
-  noiseBuf:null,
+  noiseBuf:null, coughBuf:null, coughLoading:false, vowelBuf:null, vowelLoading:false, vowelSrc:null,
 
   syncUI(){
     const btn = $('audioBtn'), lbl = $('audioLabel');
     if(!btn || !lbl) return;
     btn.classList.toggle('muted', this.muted);
-    const needsTap = !this.muted && !this.unlocked;
-    btn.classList.toggle('locked', needsTap);
-    lbl.textContent = this.muted ? 'Muted' : (needsTap ? 'Tap for Sound' : 'Sound On');
+    btn.classList.toggle('locked', !this.muted && !this.unlocked);
+    lbl.textContent = this.muted ? 'Sound Off' : (this.unlocked ? 'Sound On' : 'Tap for Sound');
+  },
+
+  initBgElement(){
+    if(this.bgEl) return;
+    const el = document.createElement('audio');
+    el.src = BG_URL;
+    el.loop = true;
+    el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    el.muted = this.muted;
+    el.volume = this.muted ? 0 : BG_LOW_DB_GAIN;
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    this.bgEl = el;
+
+    const tryPlayEl = () => {
+      if(this.muted || !this.bgEl) return;
+      const p = this.bgEl.play();
+      if(p && typeof p.then === 'function'){
+        p.then(() => {
+          this.unlocked = true;
+          this.bgStarted = true;
+          this.syncUI();
+        }).catch(() => {
+          this.syncUI();
+        });
+      }
+    };
+    this.tryPlayBgEl = tryPlayEl;
+    tryPlayEl();
   },
 
   ensure(){
     try{
+      this.initBgElement();
+      if(this.bgEl){
+        this.bgEl.muted = this.muted;
+        if(!this.muted && this.bgEl.paused && this.tryPlayBgEl){
+          this.tryPlayBgEl();
+        }
+      }
+
       if(!this.ctx){
         const AC = window.AudioContext || window.webkitAudioContext;
+        if(!AC) return;
         this.ctx = new AC();
         this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : 1.0;
+        this.master.gain.value = this.muted ? 0 : 0.75;
         this.master.connect(this.ctx.destination);
 
         this.duckGain = this.ctx.createGain();
-        this.duckGain.gain.value = 1.0;
+        this.duckGain.gain.value = 1;
         this.duckGain.connect(this.master);
 
         this.scoreGain = this.ctx.createGain();
-        this.scoreGain.gain.value = 0.14;
+        this.scoreGain.gain.value = this.muted ? 0.0001 : BG_LOW_DB_GAIN;
         this.scoreGain.connect(this.duckGain);
 
         const sr = this.ctx.sampleRate;
@@ -468,11 +559,24 @@ const SFX = {
         const ch = this.noiseBuf.getChannelData(0);
         for(let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
       }
+      if(!this.coughBuf && !this.coughLoading){
+        this.loadAudio(COUGH_URL, 'coughBuf', 'coughLoading');
+      }
+      if(!this.vowelBuf && !this.vowelLoading){
+        this.loadAudio(VOWEL_URL, 'vowelBuf', 'vowelLoading');
+      }
+      if(!this.bgBuffer && !this.bgLoading){
+        this.loadAudio(BG_URL, 'bgBuffer', 'bgLoading');
+      }
       if(this.ctx.state === 'suspended'){
         const p = this.ctx.resume();
         if(p && typeof p.then === 'function'){
           p.then(() => {
             this.unlocked = (this.ctx.state === 'running');
+            if(this.unlocked && !this.started){
+              this.started = true;
+              this.startScore();
+            }
             this.syncUI();
           }).catch(() => {});
         }
@@ -488,43 +592,56 @@ const SFX = {
     }catch(_){}
   },
 
+  async loadAudio(url, bufKey, flagKey){
+    if(!this.ctx || this[flagKey] || this[bufKey]) return;
+    this[flagKey] = true;
+    try{
+      const res = await fetch(url, {mode:'cors'});
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const arr = await res.arrayBuffer();
+      this[bufKey] = await this.ctx.decodeAudioData(arr);
+      if(bufKey === 'bgBuffer' && this.unlocked && !this.bgStarted){
+        this.startScore();
+      }
+    }catch(_){
+      // Falls back to background <audio> element or synthesized audio if offline
+    }finally{
+      this[flagKey] = false;
+    }
+  },
+
   startScore(){
     if(!this.ctx || !this.scoreGain) return;
     const now = this.ctx.currentTime;
-    const freqs = [146.83, 220.0, 261.63, 329.63];
-    const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(560, now);
-    lp.connect(this.scoreGain);
+    const targetGain = this.muted ? 0.0001 : BG_LOW_DB_GAIN;
+    this.scoreGain.gain.cancelScheduledValues(now);
+    this.scoreGain.gain.setTargetAtTime(targetGain, now, 0.4);
 
-    freqs.forEach((f, idx) => {
-      const osc = this.ctx.createOscillator();
-      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
-      osc.frequency.setValueAtTime(f, now);
-
-      const g = this.ctx.createGain();
-      g.gain.setValueAtTime(0.24 / freqs.length, now);
-
-      const lfo = this.ctx.createOscillator();
-      lfo.type = 'sine';
-      lfo.frequency.setValueAtTime(0.09 + idx * 0.025, now);
-      const lfoGain = this.ctx.createGain();
-      lfoGain.gain.setValueAtTime(0.06, now);
-      lfo.connect(lfoGain);
-      lfoGain.connect(g.gain);
-
-      osc.connect(g);
-      g.connect(lp);
-      osc.start(now);
-      lfo.start(now);
-    });
+    if(this.bgBuffer && !this.bgStarted){
+      this.bgStarted = true;
+      if(this.bgEl && !this.bgEl.paused){
+        try{ this.bgEl.pause(); }catch(_){}
+      }
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.bgBuffer;
+      src.loop = true;
+      src.connect(this.scoreGain);
+      src.start(now);
+      this.bgSource = src;
+    }else if(this.bgEl && !this.muted && this.tryPlayBgEl){
+      this.tryPlayBgEl();
+    }
   },
 
   duck(active){
+    if(this.bgEl){
+      const baseVol = this.muted ? 0 : BG_LOW_DB_GAIN;
+      this.bgEl.volume = active ? baseVol * 0.25 : baseVol;
+    }
     if(!this.ctx || !this.duckGain) return;
     const now = this.ctx.currentTime;
     this.duckGain.gain.cancelScheduledValues(now);
-    this.duckGain.gain.setTargetAtTime(active ? 0.3 : 1.0, now, 0.14);
+    this.duckGain.gain.setTargetAtTime(active ? 0.25 : 1.0, now, 0.14);
   },
 
   playCough(){
@@ -532,151 +649,167 @@ const SFX = {
     if(!this.ctx || !this.master || this.muted || !this.unlocked) return;
     const now = this.ctx.currentTime;
     this.duck(true);
+
+    if(this.coughBuf){
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.coughBuf;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(1.15, now);
+      src.connect(g);
+      g.connect(this.master);
+      src.start(now);
+      const durMs = Math.min(3500, Math.max(850, this.coughBuf.duration * 1000));
+      setTimeout(() => { if(!this.vowelActive) this.duck(false); }, durMs);
+      return;
+    }
+
     setTimeout(() => { if(!this.vowelActive) this.duck(false); }, 950);
 
     const barks = [
       {dt:0.00, dur:0.15, f0:175, f1:82, gain:0.65},
       {dt:0.20, dur:0.17, f0:165, f1:76, gain:0.75},
-      {dt:0.42, dur:0.21, f0:150, f1:68, gain:0.60}
+      {dt:0.43, dur:0.24, f0:150, f1:68, gain:0.55}
     ];
     barks.forEach(b => {
       const t0 = now + b.dt;
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const bp = this.ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(520, t0);
+      bp.frequency.exponentialRampToValueAtTime(220, t0 + b.dur);
+      bp.Q.value = 1.6;
+      const ng = this.ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.exponentialRampToValueAtTime(b.gain, t0 + 0.018);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + b.dur);
+      src.connect(bp); bp.connect(ng); ng.connect(this.master);
+      src.start(t0); src.stop(t0 + b.dur + 0.02);
+
       const osc = this.ctx.createOscillator();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(b.f0, t0);
       osc.frequency.exponentialRampToValueAtTime(b.f1, t0 + b.dur);
-
-      const shaper = this.ctx.createBiquadFilter();
-      shaper.type = 'bandpass';
-      shaper.frequency.setValueAtTime(420, t0);
-      shaper.Q.setValueAtTime(2.2, t0);
-
-      const env = this.ctx.createGain();
-      env.gain.setValueAtTime(0.001, t0);
-      env.gain.linearRampToValueAtTime(b.gain, t0 + 0.022);
-      env.gain.exponentialRampToValueAtTime(0.001, t0 + b.dur);
-
-      osc.connect(shaper);
-      shaper.connect(env);
-      env.connect(this.master);
-      osc.start(t0);
-      osc.stop(t0 + b.dur + 0.02);
-
-      if(this.noiseBuf){
-        const ns = this.ctx.createBufferSource();
-        ns.buffer = this.noiseBuf;
-        const bp = this.ctx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.setValueAtTime(1350, t0);
-        bp.Q.setValueAtTime(1.1, t0);
-
-        const nEnv = this.ctx.createGain();
-        nEnv.gain.setValueAtTime(0.001, t0);
-        nEnv.gain.linearRampToValueAtTime(b.gain * 0.5, t0 + 0.015);
-        nEnv.gain.exponentialRampToValueAtTime(0.001, t0 + b.dur * 0.9);
-
-        ns.connect(bp);
-        bp.connect(nEnv);
-        nEnv.connect(this.master);
-        ns.start(t0);
-        ns.stop(t0 + b.dur + 0.02);
-      }
+      const lp = this.ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 460;
+      const og = this.ctx.createGain();
+      og.gain.setValueAtTime(0.0001, t0);
+      og.gain.exponentialRampToValueAtTime(b.gain * 0.55, t0 + 0.015);
+      og.gain.exponentialRampToValueAtTime(0.0001, t0 + b.dur);
+      osc.connect(lp); lp.connect(og); og.connect(this.master);
+      osc.start(t0); osc.stop(t0 + b.dur + 0.02);
     });
   },
 
-  playVowel(durationSec = 4.2){
+  playVowel(sec = 3.6){
     this.ensure();
-    this.stopVowel();
     if(!this.ctx || !this.master || this.muted || !this.unlocked) return;
     const now = this.ctx.currentTime;
     this.vowelActive = true;
     this.duck(true);
+    clearTimeout(this.vowelStopTimer);
 
-    const f0 = this.ctx.createOscillator();
-    f0.type = 'sawtooth';
-    f0.frequency.setValueAtTime(128, now);
-    f0.frequency.linearRampToValueAtTime(122, now + durationSec);
+    if(this.vowelSrc){
+      try{ this.vowelSrc.stop(); }catch(_){}
+      this.vowelSrc = null;
+    }
 
-    const vib = this.ctx.createOscillator();
-    vib.type = 'sine';
-    vib.frequency.setValueAtTime(4.8, now);
-    const vibG = this.ctx.createGain();
-    vibG.gain.setValueAtTime(2.2, now);
-    vib.connect(vibG);
-    vibG.connect(f0.frequency);
+    if(this.vowelBuf){
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.vowelBuf;
+      const g = this.ctx.createGain();
+      g.gain.setValueAtTime(1.1, now);
+      src.connect(g);
+      g.connect(this.master);
+      src.start(now);
+      this.vowelSrc = src;
 
-    const f1 = this.ctx.createBiquadFilter();
-    f1.type = 'bandpass';
-    f1.frequency.setValueAtTime(730, now);
-    f1.Q.setValueAtTime(5.5, now);
-
-    const f2 = this.ctx.createBiquadFilter();
-    f2.type = 'bandpass';
-    f2.frequency.setValueAtTime(1150, now);
-    f2.Q.setValueAtTime(4.5, now);
-
-    const f1Gain = this.ctx.createGain();
-    f1Gain.gain.setValueAtTime(0.6, now);
-    const f2Gain = this.ctx.createGain();
-    f2Gain.gain.setValueAtTime(0.32, now);
-
-    const env = this.ctx.createGain();
-    env.gain.setValueAtTime(0.001, now);
-    env.gain.linearRampToValueAtTime(0.38, now + 0.25);
-    env.gain.setValueAtTime(0.35, now + Math.max(0.3, durationSec - 0.35));
-    env.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
-
-    f0.connect(f1);
-    f0.connect(f2);
-    f1.connect(f1Gain);
-    f2.connect(f2Gain);
-    f1Gain.connect(env);
-    f2Gain.connect(env);
-    env.connect(this.master);
-
-    f0.start(now);
-    vib.start(now);
-    f0.stop(now + durationSec + 0.05);
-    vib.stop(now + durationSec + 0.05);
+      const playDur = Math.min(sec, this.vowelBuf.duration);
+      if(this.vowelBuf.duration > sec){
+        g.gain.setValueAtTime(1.1, now + sec - 0.25);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + sec);
+        src.stop(now + sec + 0.03);
+      }
+      this.vowelStopTimer = setTimeout(() => {
+        this.vowelActive = false;
+        this.vowelSrc = null;
+        this.duck(false);
+      }, playDur * 1000);
+      return;
+    }
 
     this.vowelStopTimer = setTimeout(() => {
       this.vowelActive = false;
       this.duck(false);
-    }, durationSec * 1000);
-  },
+    }, sec * 1000);
 
-  stopVowel(){
-    if(this.vowelStopTimer){
-      clearTimeout(this.vowelStopTimer);
-      this.vowelStopTimer = null;
-    }
-    this.vowelActive = false;
-    this.duck(false);
+    const osc = this.ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(142, now);
+
+    const vib = this.ctx.createOscillator();
+    const vibG = this.ctx.createGain();
+    vib.frequency.value = 5.2;
+    vibG.gain.value = 2.4;
+    vib.connect(vibG);
+    vibG.connect(osc.frequency);
+
+    const f1 = this.ctx.createBiquadFilter();
+    f1.type = 'bandpass'; f1.frequency.value = 730; f1.Q.value = 4.5;
+    const f2 = this.ctx.createBiquadFilter();
+    f2.type = 'bandpass'; f2.frequency.value = 1090; f2.Q.value = 5.0;
+
+    const env = this.ctx.createGain();
+    env.gain.setValueAtTime(0.0001, now);
+    env.gain.exponentialRampToValueAtTime(0.26, now + 0.22);
+    env.gain.setValueAtTime(0.24, now + sec - 0.35);
+    env.gain.exponentialRampToValueAtTime(0.0001, now + sec);
+
+    osc.connect(f1); osc.connect(f2);
+    f1.connect(env); f2.connect(env);
+    env.connect(this.master);
+
+    osc.start(now); vib.start(now);
+    osc.stop(now + sec + 0.05); vib.stop(now + sec + 0.05);
   },
 
   toggleMute(){
-    if(this.muted){
+    this.ensure();
+    if(!this.unlocked){
       this.muted = false;
-      this.ensure();
-    }else if(!this.unlocked){
-      this.ensure();
-    }else{
-      this.muted = true;
-      this.stopVowel();
+      if(this.bgEl) this.bgEl.muted = false;
+      if(this.tryPlayBgEl) this.tryPlayBgEl();
+      this.syncUI();
+      return;
     }
-    if(this.master && this.ctx){
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 1.0, this.ctx.currentTime, 0.05);
+    this.muted = !this.muted;
+    if(this.bgEl){
+      this.bgEl.muted = this.muted;
+      this.bgEl.volume = this.muted ? 0 : BG_LOW_DB_GAIN;
+      if(!this.muted && this.bgEl.paused && !this.bgSource && this.tryPlayBgEl){
+        this.tryPlayBgEl();
+      }
+    }
+    if(this.ctx && this.master){
+      this.master.gain.setTargetAtTime(this.muted ? 0 : 0.75, this.ctx.currentTime, 0.08);
+    }
+    if(this.ctx && this.scoreGain){
+      this.scoreGain.gain.setTargetAtTime(this.muted ? 0.0001 : BG_LOW_DB_GAIN, this.ctx.currentTime, 0.1);
     }
     this.syncUI();
   }
 };
 
-$('audioBtn').addEventListener('click', e => {
-  e.stopPropagation();
-  SFX.toggleMute();
+SFX.muted = false;
+SFX.syncUI();
+SFX.ensure();
+window.addEventListener('load', () => SFX.ensure(), {once:true});
+$('audioBtn').addEventListener('click', () => SFX.toggleMute());
+['pointerdown', 'keydown'].forEach(ev => {
+  window.addEventListener(ev, () => SFX.ensure(), {once:true, passive:true});
 });
 
-/* ---------- three scene ---------- */
 const R = new THREE.WebGLRenderer({canvas:$('gl'), antialias:true});
 R.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 const sc = new THREE.Scene();
@@ -696,28 +829,33 @@ const grid = new THREE.GridHelper(60, 60, 0x1d4a42, 0x10302a);
 grid.position.y = -4.6;
 sc.add(grid);
 
-const M = (c, o={}) => new THREE.MeshStandardMaterial(Object.assign({color:c, roughness:.55, metalness:.1}, o));
-const mesh = (g, m, x=0, y=0, z=0, p) => {
+const M = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({color:c, roughness:.55, metalness:.1}, o));
+const mesh = (g, m, x = 0, y = 0, z = 0, p) => {
   const o = new THREE.Mesh(g, m);
   o.position.set(x, y, z);
   (p || sc).add(o);
   return o;
 };
 
-function label(txt, col, w=3){
+function label(txt, col, w = 3){
   const c = document.createElement('canvas');
   c.width = 512; c.height = 96;
   const x = c.getContext('2d');
-  x.fillStyle = 'rgba(7,19,15,.82)';
+  x.fillStyle = 'rgba(7,19,15,.78)';
   x.beginPath();
-  if(x.roundRect) x.roundRect(4, 8, 504, 80, 40); else x.rect(4, 8, 504, 80);
+  x.roundRect ? x.roundRect(4, 8, 504, 80, 40) : x.rect(4, 8, 504, 80);
   x.fill();
-  x.strokeStyle = col; x.lineWidth = 3; x.stroke();
+  x.strokeStyle = col;
+  x.lineWidth = 3;
+  x.stroke();
   x.fillStyle = '#E8F4F0';
-  x.font = '600 32px Hanken Grotesk,sans-serif';
-  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = '600 34px Hanken Grotesk,sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
   x.fillText(txt, 256, 50);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c), transparent:true, depthTest:false, opacity:0}));
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:new THREE.CanvasTexture(c), transparent:true, depthTest:false, opacity:0
+  }));
   s.scale.set(w, w * 96 / 512, 1);
   s.renderOrder = 9;
   sc.add(s);
@@ -727,11 +865,7 @@ function label(txt, col, w=3){
 const teal = M(0x0b8a7d, {roughness:.35});
 const dark = M(0x10201c, {roughness:.4, metalness:.4});
 
-/* sculpted human figure */
-function latheTaper(pts, seg=24){
-  return new THREE.LatheGeometry(pts.map(([r,y]) => new THREE.Vector2(Math.max(0.005, r), y)), seg);
-}
-
+/* ---------- Seated Patient ---------- */
 const fig = new THREE.Group();
 fig.position.set(-4.2, -4.6, 0);
 fig.rotation.y = .45;
@@ -742,196 +876,397 @@ const sk = M(0xa8765a, {roughness:.72});
 const shirt = M(0x2f6f8f, {roughness:.85});
 const pant = M(0x2b3442, {roughness:.88});
 const wood = M(0x6b4a32, {roughness:.7});
-const hair = M(0x161210, {roughness:.9});
-const add = (g, m, x, y, z, p=fig) => mesh(g, m, x, y, z, p);
+const hair = M(0x191310, {roughness:.92});
+const add = (g, m, x, y, z, p = fig) => mesh(g, m, x, y, z, p);
 
-// Chair
+/* Chair */
 add(new THREE.BoxGeometry(2, .12, 1.8), wood, 0, .92, .1);
 add(new THREE.BoxGeometry(2, 2.1, .1), wood, 0, 2, -.85);
-[[-.9,-.8],[.9,-.8],[-.9,.9],[.9,.9]].forEach(([x,z]) => add(new THREE.CylinderGeometry(.05,.05,.9,8), wood, x, .45, z));
+[[-.9,-.8],[.9,-.8],[-.9,.9],[.9,.9]].forEach(([x,z]) =>
+  add(new THREE.CylinderGeometry(.05, .05, .9, 8), wood, x, .45, z)
+);
 
-// Sculpted torso & neck
-const torsoGeo = latheTaper([
-  [0.01, -1.05], [0.46, -0.95], [0.43, -0.45], [0.48, 0.15], [0.58, 0.75], [0.32, 1.05], [0.01, 1.12]
-], 28);
-const chest = add(torsoGeo, shirt, 0, 2.15, 0);
-chest.scale.set(1.05, 1, .68);
-
-const neck = add(latheTaper([[0.19, -0.22], [0.16, 0.0], [0.18, 0.24]], 20), sk, 0, 3.45, .02);
-
-// Sculpted head
-const headG = new THREE.Group();
-headG.position.set(0, 3.68, .04);
-fig.add(headG);
-
-const craniumGeo = latheTaper([
-  [0.01, -0.22], [0.28, -0.14], [0.46, 0.15], [0.51, 0.48], [0.44, 0.78], [0.22, 0.94], [0.01, 0.98]
-], 28);
-const headMesh = add(craniumGeo, sk, 0, .15, 0, headG);
-headMesh.scale.set(.84, 1.02, .94);
-
-const hairCap = add(latheTaper([
-  [0.48, 0.35], [0.53, 0.56], [0.46, 0.82], [0.24, 0.97], [0.01, 1.01]
-], 28), hair, 0, .17, -.03, headG);
-hairCap.scale.set(.86, 1.03, .98);
-
-function limb(a, b, r0, r1, m){
-  const d = b.clone().sub(a);
-  const g = latheTaper([[r0, -d.length()/2], [r1, d.length()/2]], 18);
-  const o = new THREE.Mesh(g, m);
-  o.position.copy(a).add(b).multiplyScalar(.5);
-  o.quaternion.setFromUnitVectors(V(0, 1, 0), d.clone().normalize());
-  fig.add(o);
-  const j = new THREE.Mesh(new THREE.SphereGeometry(r1 * .94, 14, 10), m);
-  j.position.copy(b);
-  fig.add(j);
-  return o;
+function latheLimb(pts, mat, seg = 24){
+  const v2 = pts.map(([r, y]) => new THREE.Vector2(r, y));
+  return new THREE.LatheGeometry(v2, seg);
 }
 
+/* Torso & Shoulders */
+const torso = new THREE.Group();
+torso.position.set(0, 1.0, .05);
+fig.add(torso);
+
+const chestGeo = latheLimb([
+  [0,0],[.46,0],[.52,.22],[.48,.65],[.58,1.25],[.64,1.72],[.54,1.98],[.24,2.14],[0,2.16]
+], shirt, 32);
+const chest = mesh(chestGeo, shirt, 0, 0, 0, torso);
+chest.scale.z = .64;
+
+const collar = mesh(new THREE.TorusGeometry(.24, .045, 12, 28), M(0x245873, {roughness:.8}), 0, 2.1, .02, torso);
+collar.rotation.x = Math.PI / 2 + .18;
+
+/* Neck & Clip */
+const neck = mesh(latheLimb([[.23,0],[.20,.22],[.19,.46],[.21,.56]], sk, 24), sk, 0, 2.08, .02, torso);
+const clipMesh = mesh(new THREE.BoxGeometry(.28, .22, .11), teal, 0, 2.34, .23, torso);
+mesh(new THREE.BoxGeometry(.32, .06, .04), M(0x38c4b3, {roughness:.3}), 0, 2.34, .28, torso);
+
+/* Head */
+const headG = new THREE.Group();
+headG.position.set(0, 2.6, .04);
+torso.add(headG);
+
+const headGeo = latheLimb([
+  [0,0],[.18,.04],[.34,.18],[.44,.42],[.48,.70],[.46,.94],[.34,1.12],[.16,1.20],[0,1.22]
+], sk, 32);
+const cranium = mesh(headGeo, sk, 0, -.04, 0, headG);
+cranium.scale.set(.86, 1.0, .96);
+
+const hairGeo = latheLimb([
+  [.46,.52],[.50,.74],[.48,.98],[.36,1.16],[.17,1.24],[0,1.26]
+], hair, 32);
+const hairMesh = mesh(hairGeo, hair, 0, -.02, -.03, headG);
+hairMesh.scale.set(.89, 1.02, 1.01);
+
 [-1, 1].forEach(q => {
-  add(new THREE.SphereGeometry(.1, 12, 10), sk, q * .43, .52, 0, headG).scale.set(.45, .95, .75);
-  limb(V(q * .56, 2.95, 0), V(q * .68, 2.15, .16), .18, .15, shirt);
-  limb(V(q * .68, 2.15, .16), V(q * .44, 1.44, .98), .14, .11, sk);
-  limb(V(q * .32, 1.12, .18), V(q * .36, 1.12, 1.42), .22, .18, pant);
-  limb(V(q * .36, 1.12, 1.42), V(q * .36, .16, 1.52), .17, .13, pant);
-  add(new THREE.BoxGeometry(.28, .14, .52), dark, q * .36, .08, 1.7);
+  const ear = mesh(new THREE.SphereGeometry(.09, 12, 10), sk, q * .41, .52, -.02, headG);
+  ear.scale.set(.42, 1.0, .72);
+});
+const nose = mesh(new THREE.ConeGeometry(.065, .18, 12), sk, 0, .50, .46, headG);
+nose.rotation.x = Math.PI / 2 - .2;
+
+function taperedSegment(a, b, r0, r1, mat, parent = fig){
+  const d = b.clone().sub(a);
+  const g = new THREE.CylinderGeometry(r1, r0, d.length(), 18);
+  const m = new THREE.Mesh(g, mat);
+  m.position.copy(a).add(b).multiplyScalar(.5);
+  m.quaternion.setFromUnitVectors(V(0, 1, 0), d.clone().normalize());
+  parent.add(m);
+  const j = new THREE.Mesh(new THREE.SphereGeometry(r1 * .96, 14, 12), mat);
+  j.position.copy(b);
+  parent.add(j);
+  return m;
+}
+
+/* Arms & Hands */
+[-1, 1].forEach(q => {
+  const sh = V(q * .64, 1.88, 0);
+  mesh(new THREE.SphereGeometry(.20, 16, 14), shirt, sh.x, sh.y, sh.z, torso);
+  const el = V(q * .78, 1.12, .18);
+  const wr = V(q * .46, .52, .92);
+  taperedSegment(sh, el, .18, .14, shirt, torso);
+  taperedSegment(el, wr, .135, .10, sk, torso);
+  const palm = mesh(new THREE.BoxGeometry(.16, .09, .22), sk, wr.x, wr.y - .01, wr.z + .12, torso);
+  palm.rotation.x = .15;
 });
 
-// Tracheal piezo clip on throat
-const clipMesh = add(new THREE.BoxGeometry(.26, .22, .11), teal, 0, 3.46, .21);
+/* Right index finger + pulse oximeter */
+const fingerTip = V(.44, .50, 1.24);
+taperedSegment(V(.46, .51, 1.04), fingerTip, .032, .026, sk, torso);
+const oxGroup = new THREE.Group();
+oxGroup.position.copy(fingerTip);
+torso.add(oxGroup);
+mesh(new THREE.BoxGeometry(.22, .18, .30), M(0x1a6fd0, {roughness:.3}), 0, .02, .02, oxGroup);
+const led = mesh(new THREE.SphereGeometry(.032, 12, 10), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true}), 0, .12, .02, oxGroup);
+const beam = mesh(new THREE.CylinderGeometry(.014, .014, .18, 8), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true, opacity:.6}), 0, .02, .02, oxGroup);
+
+/* Legs & Shoes */
+[-1, 1].forEach(q => {
+  const hip = V(q * .28, 1.04, .12);
+  const knee = V(q * .32, 1.02, 1.32);
+  const ankle = V(q * .32, .14, 1.44);
+  taperedSegment(hip, knee, .22, .17, pant, fig);
+  taperedSegment(knee, ankle, .165, .12, pant, fig);
+  const shoe = mesh(new THREE.BoxGeometry(.26, .13, .50), dark, q * .32, .065, 1.62, fig);
+  shoe.geometry.translate(0, 0, .02);
+});
 
 const rings = [0, 1, 2].map(i => {
-  const r = mesh(new THREE.RingGeometry(.26, .3, 48), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, side:2, depthWrite:false}), -3.95, .42, .48);
+  const r = mesh(new THREE.RingGeometry(.28, .32, 48), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, side:2, depthWrite:false}), -3.95, .78, .48);
   r.rotation.y = .45;
   r.userData.o = i / 3;
   return r;
 });
-const burstRing = mesh(new THREE.RingGeometry(.26, .34, 48), new THREE.MeshBasicMaterial({color:0xff7a70, transparent:true, opacity:0, side:2, depthWrite:false}), -3.93, .42, .52);
+const burstRing = mesh(new THREE.RingGeometry(.28, .36, 48), new THREE.MeshBasicMaterial({color:0xff7a70, transparent:true, opacity:0, side:2, depthWrite:false}), -3.93, .78, .52);
 burstRing.rotation.y = .45;
 
-// Fingertip pulse oximeter
-limb(V(.44, 1.44, .98), V(.46, 1.48, 1.24), .09, .06, sk);
-add(new THREE.BoxGeometry(.22, .18, .32), M(0x1a6fd0, {roughness:.3}), .46, 1.51, 1.16);
-const led = add(new THREE.SphereGeometry(.032, 12, 10), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true}), .46, 1.61, 1.16);
-const beam = add(new THREE.CylinderGeometry(.014, .014, .18, 8), new THREE.MeshBasicMaterial({color:0xff3b30, transparent:true, opacity:.6}), .46, 1.51, 1.16);
-
-/* esp32-s3 showcase module */
+/* ---------- Realistic ESP32-S3 DevKit Module ---------- */
 const eg = new THREE.Group();
 eg.position.set(0, -.2, 0);
 eg.rotation.x = -.5;
 sc.add(eg);
 
-mesh(new THREE.BoxGeometry(2.8, .14, 1.7), M(0x0e3a32, {roughness:.45, metalness:.15}), 0, 0, 0, eg);
-const chip = mesh(new THREE.BoxGeometry(.9, .16, .9), dark, -.5, .14, .1, eg);
-const can = mesh(new THREE.BoxGeometry(1, .2, .62), M(0xb9c4c1, {metalness:.82, roughness:.28}), .6, .17, -.35, eg);
-for(let i = 0; i < 14; i++){
-  mesh(new THREE.BoxGeometry(.06, .05, .06), M(0xd8b04a, {metalness:.85, roughness:.25}), -1.25 + i * .19, .08, .78, eg);
-  mesh(new THREE.BoxGeometry(.06, .05, .06), M(0xd8b04a, {metalness:.85, roughness:.25}), -1.25 + i * .19, .08, -.78, eg);
-}
-mesh(new THREE.BoxGeometry(.5, .2, .35), M(0xc9d2cf, {metalness:.8, roughness:.3}), 1.5, .14, .2, eg);
-const eled = mesh(new THREE.SphereGeometry(.07, 12, 10), new THREE.MeshBasicMaterial({color:0x4cd082}), -1.1, .14, -.55, eg);
+mesh(new THREE.BoxGeometry(2.9, .12, 1.75), M(0x0b332b, {roughness:.45, metalness:.15}), 0, 0, 0, eg);
+mesh(new THREE.BoxGeometry(2.92, .02, 1.77), M(0xd8b04a, {metalness:.85, roughness:.25}), 0, -.05, 0, eg);
 
-/* realistic phone */
+const chip = mesh(new THREE.BoxGeometry(.76, .12, .76), M(0x141918, {roughness:.35, metalness:.4}), -.45, .12, .08, eg);
+const chipGlow = mesh(new THREE.PlaneGeometry(.62, .62), new THREE.MeshBasicMaterial({color:0x38c4b3, transparent:true, opacity:.18}), -.45, .185, .08, eg);
+chipGlow.rotation.x = -Math.PI / 2;
+
+const can = mesh(new THREE.BoxGeometry(1.05, .20, .72), M(0xc7d1ce, {metalness:.88, roughness:.22}), .58, .16, -.30, eg);
+mesh(new THREE.BoxGeometry(.92, .015, .58), M(0x889692, {metalness:.7, roughness:.4}), .58, .265, -.30, eg);
+
+const ant = mesh(new THREE.BoxGeometry(.42, .08, .72), M(0x182220, {roughness:.6}), 1.28, .10, -.30, eg);
+for(let a = 0; a < 4; a++){
+  mesh(new THREE.BoxGeometry(.26, .015, .05), M(0xd8b04a, {metalness:.85}), 1.28, .145, -.52 + a * .14, ant.parent);
+}
+
+for(let i = 0; i < 15; i++){
+  const px = -1.32 + i * .188;
+  mesh(new THREE.BoxGeometry(.055, .14, .055), M(0xd8b04a, {metalness:.85, roughness:.25}), px, .02, .78, eg);
+  mesh(new THREE.BoxGeometry(.055, .14, .055), M(0xd8b04a, {metalness:.85, roughness:.25}), px, .02, -.78, eg);
+}
+
+[-0.85, -0.35].forEach(bx => {
+  mesh(new THREE.BoxGeometry(.22, .08, .22), M(0xbcc6c3, {metalness:.7}), bx, .10, -.52, eg);
+  mesh(new THREE.CylinderGeometry(.055, .055, .06, 14), M(0x1e2624, {roughness:.4}), bx, .15, -.52, eg);
+});
+
+const usbPort = mesh(new THREE.BoxGeometry(.48, .18, .38), M(0xcfd8d5, {metalness:.88, roughness:.22}), 1.52, .12, .28, eg);
+mesh(new THREE.BoxGeometry(.04, .10, .24), M(0x09110f), 1.75, .12, .28, eg);
+const eled = mesh(new THREE.SphereGeometry(.055, 12, 10), new THREE.MeshBasicMaterial({color:0x4cd082}), -1.16, .12, -.52, eg);
+
+/* ---------- Realistic Rounded Android Smartphone ---------- */
 const ph = new THREE.Group();
 ph.position.set(4.2, .3, 0);
 ph.rotation.y = -.28;
 sc.add(ph);
 
-mesh(new THREE.BoxGeometry(2.04, 3.94, .14), M(0x16211e, {roughness:.25, metalness:.75}), 0, 0, 0, ph);
+function roundedRectShape(w, h, r){
+  const s = new THREE.Shape();
+  const x = -w / 2, y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+const bodyGeo = new THREE.ExtrudeGeometry(roundedRectShape(2.04, 3.96, .24), {
+  depth:.12, bevelEnabled:true, bevelSegments:4, steps:1, bevelSize:.02, bevelThickness:.02
+});
+bodyGeo.center();
+mesh(bodyGeo, M(0x121c19, {roughness:.28, metalness:.78}), 0, 0, 0, ph);
+
+const bezelGeo = new THREE.ShapeGeometry(roundedRectShape(1.94, 3.86, .20));
+mesh(bezelGeo, M(0x050908, {roughness:.18, metalness:.3}), 0, 0, .081, ph);
+
 const pc = document.createElement('canvas');
-pc.width = 512; pc.height = 1024;
+pc.width = 540; pc.height = 1120;
 const px = pc.getContext('2d');
 const ptex = new THREE.CanvasTexture(pc);
 ptex.anisotropy = 8;
-mesh(new THREE.PlaneGeometry(1.86, 3.72), new THREE.MeshBasicMaterial({map:ptex}), 0, 0, .075, ph);
 
-/* wires + packets */
-const curves = [
-  {c:new THREE.CatmullRomCurve3([V(-3.97, .42, .48), V(-3.2, .85, 1.2), V(-2.1, .5, .9), V(-1.35, .1, .5)]), col:0x38c4b3},
-  {c:new THREE.CatmullRomCurve3([V(-3.53, -2.4, 1.05), V(-2.4, -1.5, 1.05), V(-1.8, -.7, .9), V(-1.35, -.15, .45)]), col:0x6bb1ff},
-  {c:new THREE.CatmullRomCurve3([V(1.45, -.05, .35), V(2.2, .15, .5), V(3.1, .2, .4)]), col:0xf2a93b}
-];
-const packets = [];
+const scrGeo = new THREE.PlaneGeometry(1.82, 3.74);
+mesh(scrGeo, new THREE.MeshBasicMaterial({map:ptex}), 0, 0, .084, ph);
+
+const punch = mesh(new THREE.CircleGeometry(.032, 16), new THREE.MeshBasicMaterial({color:0x050908}), 0, 1.77, .086, ph);
+punch.renderOrder = 2;
+
+const camIsland = mesh(new THREE.BoxGeometry(.52, .88, .04), M(0x0b1210, {roughness:.22, metalness:.65}), -.48, 1.24, -.09, ph);
+[-.18, .18].forEach(ly => {
+  const lens = mesh(new THREE.CylinderGeometry(.11, .11, .03, 18), M(0x1d2b38, {roughness:.15, metalness:.85}), 0, ly, -.02, camIsland);
+  lens.rotation.x = Math.PI / 2;
+});
+
+/* ---------- Dynamic Wires & Data Packets ---------- */
+const neckCurve = new THREE.CatmullRomCurve3([V(-3.95,.78,.48), V(-3.2,1.0,1.2), V(-2.1,.5,.9), V(-1.35,.1,.5)]);
+const oxCurve = new THREE.CatmullRomCurve3([V(-3.1,-1.85,1.25), V(-2.4,-1.4,1.1), V(-1.8,-.7,.9), V(-1.35,-.15,.45)]);
+const usbCurve = new THREE.CatmullRomCurve3([V(1.45,-.05,.35), V(2.2,.15,.5), V(3.1,.2,.4)]);
+const curves = [{c:neckCurve, col:0x38c4b3}, {c:oxCurve, col:0x6bb1ff}, {c:usbCurve, col:0xf2a93b}];
+const wireMeshes = [], packets = [];
+
 curves.forEach((k, ci) => {
-  mesh(new THREE.TubeGeometry(k.c, 40, .028, 8), new THREE.MeshBasicMaterial({color:k.col, transparent:true, opacity:.55}));
+  const wm = mesh(new THREE.TubeGeometry(k.c, 40, .026, 8), new THREE.MeshBasicMaterial({color:k.col, transparent:true, opacity:.55}));
+  wireMeshes.push(wm);
   for(let j = 0; j < 4; j++){
-    const p = mesh(new THREE.SphereGeometry(.07, 12, 10), new THREE.MeshBasicMaterial({color:k.col}));
+    const p = mesh(new THREE.SphereGeometry(.065, 12, 10), new THREE.MeshBasicMaterial({color:k.col}));
     p.userData = {k:k.c, o:j / 4 + ci * .1, s:ci === 2 ? .35 : .25};
     packets.push(p);
   }
 });
 
-/* labels */
+const tmpNeck = V(), tmpOx = V(), tmpUsb = V();
+function syncAnchors(){
+  sc.updateMatrixWorld(true);
+  clipMesh.getWorldPosition(tmpNeck);
+  rings.forEach(r => r.position.copy(tmpNeck));
+  burstRing.position.copy(tmpNeck);
+  neckCurve.points[0].copy(tmpNeck);
+  wireMeshes[0].geometry.dispose();
+  wireMeshes[0].geometry = new THREE.TubeGeometry(neckCurve, 40, .026, 8);
+
+  oxGroup.getWorldPosition(tmpOx);
+  oxCurve.points[0].copy(tmpOx);
+  wireMeshes[1].geometry.dispose();
+  wireMeshes[1].geometry = new THREE.TubeGeometry(oxCurve, 40, .026, 8);
+
+  usbPort.getWorldPosition(tmpUsb);
+  usbCurve.points[0].copy(tmpUsb);
+  wireMeshes[2].geometry.dispose();
+  wireMeshes[2].geometry = new THREE.TubeGeometry(usbCurve, 40, .026, 8);
+}
+syncAnchors();
+
+/* ---------- Floating Labels ---------- */
 const LB = [
   label('Tracheal piezo clip', '#38C4B3', 2.7),
   label('Fingertip oximeter', '#6BB1FF', 2.7),
   label('ESP32-S3 · filter + SQI', '#38C4B3', 3.1),
   label('Offline Android phone', '#F2A93B', 3)
 ];
-LB[0].position.set(-4, 3.05, .9);
-LB[1].position.set(-3.4, -1.65, 1.35);
-LB[2].position.set(0, 1.5, .6);
-LB[3].position.set(4.1, 2.45, .8);
+LB[0].position.set(-4, 3.15, .9);
+LB[1].position.set(-2.9, -1.35, 1.45);
+LB[2].position.set(0, 1.75, .6);
+LB[3].position.set(4.1, 2.55, .8);
 const usb = label('USB-C OTG', '#F2A93B', 1.8);
 usb.position.set(2.3, .75, .4);
 
-/* ---------- phone screen ---------- */
+/* ---------- Realistic Android Screen UI ---------- */
+function roundBox(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+}
+
+function drawPhoneLogo(ctx, cx, cy, size){
+  const s = size / 36;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(s, s);
+  ctx.strokeStyle = '#0F8A7D';
+  ctx.lineWidth = 2.8;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.arc(18, 18, 12, Math.PI * 1.16, Math.PI * 1.84);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(5.5, 18.5);
+  ctx.lineTo(12.2, 18.5);
+  ctx.lineTo(15.4, 13.2);
+  ctx.lineTo(19.6, 23.4);
+  ctx.lineTo(23.1, 16.5);
+  ctx.lineTo(30.5, 16.5);
+  ctx.stroke();
+
+  ctx.fillStyle = '#0F8A7D';
+  ctx.beginPath();
+  ctx.arc(28, 26.5, 3.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawPhone(d, showRes, prog){
-  const x = px;
-  x.fillStyle = '#F4F9F7'; x.fillRect(0, 0, 512, 1024);
-  x.fillStyle = '#0F2420'; x.font = '800 40px Bricolage Grotesque,sans-serif';
-  x.fillText('RespiTriage', 34, 86);
-  x.fillStyle = '#4A625C'; x.font = '500 24px Hanken Grotesk,sans-serif';
-  x.fillText('Works offline · LiteRT on device', 34, 124);
+  const x = px, W = 540, H = 1120;
+  x.fillStyle = '#F3F8F6';
+  x.fillRect(0, 0, W, H);
 
-  x.fillStyle = '#E1ECE8'; x.fillRect(30, 160, 452, 148);
-  x.fillStyle = '#4A625C'; x.font = '500 24px Hanken Grotesk,sans-serif';
-  x.fillText('SpO₂', 54, 206); x.fillText('Pulse', 54, 254); x.fillText('Signal quality', 54, 292);
-
+  x.fillStyle = '#0F2420';
+  x.font = '700 20px Hanken Grotesk,sans-serif';
+  x.fillText('09:41', 34, 42);
   x.textAlign = 'right';
-  x.fillStyle = '#0F2420'; x.font = '700 30px Hanken Grotesk,sans-serif';
-  x.fillText(Math.round(S.v.spo2) + '%', 458, 206);
-  x.fillText(Math.round(S.v.hr) + ' bpm', 458, 254);
-  x.fillStyle = '#1B7F46'; x.font = '700 22px Hanken Grotesk,sans-serif';
-  x.fillText('Verified', 458, 292);
+  x.fillText('OFFLINE · 100%', W - 34, 42);
   x.textAlign = 'left';
 
-  x.fillStyle = '#4A625C'; x.font = '500 24px Hanken Grotesk,sans-serif';
-  x.fillText(prog >= 1 ? 'Triage complete' : prog > 0 ? 'Analysing…' : 'Ready · 30 s scan', 34, 370);
-  x.fillStyle = '#D3E0DB'; x.fillRect(34, 388, 444, 14);
-  x.fillStyle = '#1565C0'; x.fillRect(34, 388, 444 * prog, 14);
+  drawPhoneLogo(x, 34, 70, 38);
+  x.fillStyle = '#0F2420';
+  x.font = '800 38px Bricolage Grotesque,sans-serif';
+  x.fillText('RespiTriage', 80, 101);
 
-  const bg = {RED:'#FDE6E4', YELLOW:'#FFF1D6', GREEN:'#E3F4EA'}[d.lv];
+  roundBox(x, 34, 118, 286, 34, 17);
+  x.fillStyle = '#DFF1EC';
+  x.fill();
+  x.fillStyle = '#0B7A6E';
+  x.font = '700 18px Hanken Grotesk,sans-serif';
+  x.fillText('● LiteRT Local · USB-C Connected', 48, 141);
+
+  roundBox(x, 30, 174, W - 60, 186, 24);
+  x.fillStyle = '#FFFFFF';
+  x.fill();
+  x.strokeStyle = '#DCE8E4';
+  x.lineWidth = 2;
+  x.stroke();
+
+  const metrics = [
+    ['SpO₂ Oxygen', Math.round(S.v.spo2) + '%', S.v.spo2 < 92 ? '#C62828' : '#0F2420'],
+    ['Pulse Rate', Math.round(S.v.hr) + ' bpm', '#0F2420'],
+    ['Signal Quality (SQI)', '0.91 · Verified', '#1B7F46']
+  ];
+  metrics.forEach(([k, v, col], idx) => {
+    const ry = 222 + idx * 54;
+    x.fillStyle = '#536B65';
+    x.font = '500 23px Hanken Grotesk,sans-serif';
+    x.fillText(k, 56, ry);
+    x.textAlign = 'right';
+    x.fillStyle = col;
+    x.font = '700 26px Hanken Grotesk,sans-serif';
+    x.fillText(v, W - 56, ry);
+    x.textAlign = 'left';
+  });
+
+  x.fillStyle = '#3B524C';
+  x.font = '600 22px Hanken Grotesk,sans-serif';
+  x.fillText(prog >= 1 ? 'Screening complete' : prog > 0 ? 'Running on-device inference…' : 'Ready · 30 s capture', 34, 412);
+  roundBox(x, 34, 430, W - 72, 16, 8);
+  x.fillStyle = '#D6E4DF';
+  x.fill();
+  if(prog > 0){
+    roundBox(x, 34, 430, Math.max(16, (W - 72) * prog), 16, 8);
+    x.fillStyle = '#0F8A7D';
+    x.fill();
+  }
+
+  const bg = {RED:'#FDE7E5', YELLOW:'#FFF2D8', GREEN:'#E3F5EB'}[d.lv];
   const fg = {RED:'#C62828', YELLOW:'#B26A00', GREEN:'#1B7F46'}[d.lv];
-  x.fillStyle = showRes ? bg : '#EAF0EE';
-  x.fillRect(30, 450, 452, 330);
-  x.strokeStyle = showRes ? fg : '#C5D3CE';
-  x.lineWidth = 6;
-  x.strokeRect(30, 450, 452, 330);
+  roundBox(x, 30, 480, W - 60, 390, 28);
+  x.fillStyle = showRes ? bg : '#E8F0ED';
+  x.fill();
+  x.strokeStyle = showRes ? fg : '#C5D4CF';
+  x.lineWidth = 5;
+  x.stroke();
 
   x.textAlign = 'center';
   if(showRes){
-    x.fillStyle = fg; x.font = '800 96px Bricolage Grotesque,sans-serif';
-    x.fillText(d.lv, 256, 600);
-    x.font = '700 34px Hanken Grotesk,sans-serif';
-    x.fillText(d.sub, 256, 664);
-    x.fillStyle = '#0F2420'; x.font = '500 24px Hanken Grotesk,sans-serif';
-    x.fillText(d.w.length > 34 ? d.w.slice(0, 32) + '…' : d.w, 256, 726);
+    x.fillStyle = fg;
+    x.font = '800 94px Bricolage Grotesque,sans-serif';
+    x.fillText(d.lv, W / 2, 626);
+    x.font = '700 32px Hanken Grotesk,sans-serif';
+    x.fillText(d.sub, W / 2, 692);
+    x.fillStyle = '#18302B';
+    x.font = '500 22px Hanken Grotesk,sans-serif';
+    x.fillText(d.w.length > 36 ? d.w.slice(0, 34) + '…' : d.w, W / 2, 754);
   }else{
-    x.fillStyle = '#4A625C'; x.font = '800 56px Bricolage Grotesque,sans-serif';
-    x.fillText(prog > 0 ? 'Analysing' : 'Ready', 256, 625);
+    x.fillStyle = '#4A625C';
+    x.font = '800 54px Bricolage Grotesque,sans-serif';
+    x.fillText(prog > 0 ? 'Analysing…' : 'Ready', W / 2, 668);
   }
   x.textAlign = 'left';
+
+  roundBox(x, 30, 916, W - 60, 74, 22);
+  x.fillStyle = showRes ? '#0F2420' : '#CBD9D4';
+  x.fill();
+  x.fillStyle = showRes ? '#E8F4F0' : '#5E756F';
+  x.font = '700 24px Hanken Grotesk,sans-serif';
+  x.textAlign = 'center';
+  x.fillText(showRes ? 'Save Offline Case Log' : 'Awaiting Sensor Capture', W / 2, 961);
+  x.textAlign = 'left';
+
+  roundBox(x, W / 2 - 75, H - 24, 150, 6, 3);
+  x.fillStyle = '#9BB0AA';
+  x.fill();
+
   ptex.needsUpdate = true;
 }
 
-/* ---------- HUD waves ---------- */
+/* ---------- HUD Waves ---------- */
 function wave(id, t, kind){
-  const c = $(id);
-  if(!c) return;
-  const r = c.getBoundingClientRect();
-  if(!r.width || !r.height) return;
-  const dp = Math.min(devicePixelRatio || 1, 2);
+  const c = $(id), r = c.getBoundingClientRect(), dp = Math.min(devicePixelRatio || 1, 2);
   if(c.width !== Math.round(r.width * dp)){
     c.width = Math.round(r.width * dp);
     c.height = Math.round(r.height * dp);
@@ -941,15 +1276,15 @@ function wave(id, t, kind){
   x.lineWidth = 2 * dp;
   x.beginPath();
   if(kind === 'pz'){
-    const amp = Math.min(h * .44, (.15 + S.v.vib * .75) * h * .34 * (S.burst > 0 ? 1.6 : 1));
+    const boost = S.burst > 0 ? 1.65 : SFX.vowelActive ? 1.35 : 1;
+    const amp = Math.min(h * .44, (.15 + S.v.vib * .75) * h * .34 * boost);
     x.strokeStyle = S.v.vib >= .45 ? '#F2A93B' : '#38C4B3';
     for(let i = 0; i < w; i += 2){
       const y = h / 2 + Math.sin(i * .05 / dp - t * 8) * amp * (.65 + .35 * Math.sin(i * .012 / dp - t * 3));
       i ? x.lineTo(i, y) : x.moveTo(i, y);
     }
   }else{
-    const bf = S.v.hr / 60 * Math.PI * 2;
-    const a = (S.v.spo2 < 92 ? .26 : .38) * h;
+    const bf = S.v.hr / 60 * Math.PI * 2, a = (S.v.spo2 < 92 ? .26 : .38) * h;
     x.strokeStyle = S.v.spo2 < 92 ? '#FF7A70' : '#6BB1FF';
     for(let i = 0; i < w; i += 2){
       const p = i / dp / 60 * Math.PI * 2 - t * bf * .45;
@@ -960,12 +1295,11 @@ function wave(id, t, kind){
   x.stroke();
 }
 
+/* ---------- Inside the ESP32-S3 Overlay ---------- */
 function drawChip(T){
   const c = $('chip');
-  if(!c || (S.i !== 4 && +c.style.opacity === 0)) return;
-  const r = c.getBoundingClientRect();
-  if(!r.width || !r.height) return;
-  const dp = Math.min(devicePixelRatio || 1, 2);
+  if(S.i !== 4 && +c.style.opacity === 0) return;
+  const r = c.getBoundingClientRect(), dp = Math.min(devicePixelRatio || 1, 2);
   if(c.width !== Math.round(r.width * dp)){
     c.width = Math.round(r.width * dp);
     c.height = Math.round(r.height * dp);
@@ -973,18 +1307,14 @@ function drawChip(T){
   const x = c.getContext('2d'), W = c.width / dp, H = c.height / dp;
   x.setTransform(dp, 0, 0, dp, 0, 0);
   x.clearRect(0, 0, W, H);
-
   x.fillStyle = '#E8F4F0';
   x.font = '700 20px Bricolage Grotesque,sans-serif';
   x.fillText('Inside the ESP32-S3', 22, 34);
-
   x.fillStyle = '#9CB8B0';
   x.font = '500 13px Hanken Grotesk,sans-serif';
   x.fillText('Neck vibration and pulse signals, processed on the module', 22, 54);
 
-  const N = 4, pad = 22, gap = 26;
-  const cw = (W - pad * 2 - gap * (N - 1)) / N;
-  const top = 80, bh = 130;
+  const N = 4, pad = 22, gap = 26, cw = (W - pad * 2 - gap * (N - 1)) / N, top = 80, bh = 130;
   const names = ['Raw input', 'Band-pass filter', '12-bit ADC', 'Signal quality'];
   const noise = u => Math.sin(u * 37 + T * 9) * .35 + Math.sin(u * 91 - T * 13) * .2 + Math.sin(u * 17 + T * 5) * .15;
   const clean = u => Math.sin(u * Math.PI * 6 - T * 6) * (.6 + .2 * Math.sin(u * 3 - T));
@@ -995,10 +1325,14 @@ function drawChip(T){
     x.fillStyle = 'rgba(56,196,179,.08)';
     x.strokeStyle = 'rgba(56,196,179,.5)';
     x.lineWidth = 1.5;
-    x.beginPath(); x.rect(bx, top, cw, bh); x.fill(); x.stroke();
+    x.beginPath();
+    x.rect(bx, top, cw, bh);
+    x.fill();
+    x.stroke();
 
     if(s < 3){
-      x.beginPath(); x.lineWidth = 2;
+      x.beginPath();
+      x.lineWidth = 2;
       x.strokeStyle = ['#F2A93B', '#38C4B3', '#6BB1FF'][s];
       for(let i = 0; i <= cw; i += 2){
         const u = i / cw;
@@ -1014,15 +1348,26 @@ function drawChip(T){
       x.fillRect(bx + 14, top + bh - 34, cw - 28, 10);
       x.fillStyle = '#4CD082';
       x.fillRect(bx + 14, top + bh - 34, (cw - 28) * q, 10);
-      x.beginPath(); x.arc(mx, top + 40, 18, 0, Math.PI * 2); x.fill();
-      x.strokeStyle = '#07130F'; x.lineWidth = 4;
-      x.beginPath(); x.moveTo(mx - 8, top + 40); x.lineTo(mx - 2, top + 47); x.lineTo(mx + 9, top + 33); x.stroke();
-      x.fillStyle = '#E8F4F0'; x.font = '600 13px Hanken Grotesk,sans-serif'; x.textAlign = 'center';
+      x.beginPath();
+      x.arc(mx, top + 40, 18, 0, 7);
+      x.fill();
+      x.strokeStyle = '#07130F';
+      x.lineWidth = 4;
+      x.beginPath();
+      x.moveTo(mx - 8, top + 40);
+      x.lineTo(mx - 2, top + 47);
+      x.lineTo(mx + 9, top + 33);
+      x.stroke();
+      x.fillStyle = '#E8F4F0';
+      x.font = '600 13px Hanken Grotesk,sans-serif';
+      x.textAlign = 'center';
       x.fillText('SQI ' + q.toFixed(2) + ' · pass', mx, top + bh - 46);
       x.textAlign = 'left';
     }
 
-    x.fillStyle = '#E8F4F0'; x.font = '600 13px Hanken Grotesk,sans-serif'; x.textAlign = 'center';
+    x.fillStyle = '#E8F4F0';
+    x.font = '600 13px Hanken Grotesk,sans-serif';
+    x.textAlign = 'center';
     x.fillText(names[s], bx + cw / 2, top + bh + 22);
     x.textAlign = 'left';
 
@@ -1030,14 +1375,17 @@ function drawChip(T){
       x.fillStyle = '#38C4B3';
       for(let j = 0; j < 3; j++){
         const u = (T * .8 + j / 3) % 1;
-        x.beginPath(); x.arc(bx + cw + u * gap, top + bh / 2, 3, 0, Math.PI * 2); x.fill();
+        x.beginPath();
+        x.arc(bx + cw + u * gap, top + bh / 2, 3, 0, 7);
+        x.fill();
       }
     }
   }
 
   x.globalAlpha = Math.min(1, Math.max(0, (S.t - 6600) / 600));
   const py = top + bh + 62;
-  x.fillStyle = '#9CB8B0'; x.font = '500 13px Hanken Grotesk,sans-serif';
+  x.fillStyle = '#9CB8B0';
+  x.font = '500 13px Hanken Grotesk,sans-serif';
   x.fillText('Clean packets → USB-C OTG → phone', pad, py);
   for(let j = 0; j < 14; j++){
     const u = (T * .5 + j / 14) % 1;
@@ -1050,46 +1398,48 @@ function drawChip(T){
   x.globalAlpha = 1;
 }
 
-/* ---------- director & reels sequencer ---------- */
-function renderBeats(s){
-  const box = $('reelBeat');
-  box.innerHTML = '';
-  if(!s.beats || !s.beats.length) return;
-  s.beats.forEach((b, idx) => {
-    const sp = document.createElement('span');
-    sp.textContent = b.text;
-    if(b.cls) sp.classList.add(b.cls);
-    sp.dataset.idx = idx;
-    box.appendChild(sp);
-  });
+/* ---------- Director ---------- */
+let capSwapTimer = null;
+
+function renderCaption(s){
+  clearTimeout(capSwapTimer);
+  const cp = $('cap'), beatBox = $('reelBeat');
+  if(s.end){
+    cp.style.display = 'none';
+    return;
+  }
+  cp.style.display = 'block';
+  cp.classList.remove('show');
+  cp.classList.add('out');
+  capSwapTimer = setTimeout(() => {
+    $('ck').textContent = s.k || '';
+    $('ct').textContent = s.t || '';
+    $('cx').textContent = s.x || '';
+    beatBox.innerHTML = (s.beats || [])
+      .map((b, idx) => `<span data-b="${idx}" class="${b.cls || ''}">${b.text}</span>`)
+      .join('');
+    cp.classList.remove('out');
+    void cp.offsetWidth;
+    cp.classList.add('show');
+  }, 140);
 }
 
 function go(i){
   i = Math.max(0, Math.min(SC.length - 1, i));
   const s = SC[i];
-  S.i = i; S.t = 0; S.burst = 0;
+  S.i = i;
+  S.t = 0;
+  S.burst = 0;
   S.firedCoughs.clear();
   S.firedVowel = false;
   S.firedBeats.clear();
-  SFX.stopVowel();
 
   if(s.v === LOW || i === SC.length - 1) S.sym = 1;
   S.tgt = s.v;
 
-  $('ck').textContent = s.k;
-  $('ct').textContent = s.t;
-  $('cx').textContent = s.x;
-  renderBeats(s);
-
-  const cp = $('cap');
-  cp.style.display = s.end ? 'none' : 'block';
-  cp.classList.remove('show', 'out');
-  void cp.offsetWidth;
-  cp.classList.add('show');
-
+  renderCaption(s);
   $('end').classList.toggle('on', !!s.end);
-  if(i === 5) S.scan = 0;
-  if(i < 4) S.scan = 0;
+  if(i <= 5) S.scan = 0;
 }
 
 const camP = V(...SC[0].cam), camL = V(...SC[0].look), tp = V(), tl = V();
@@ -1106,133 +1456,142 @@ function size(){
 addEventListener('resize', size);
 size();
 
-function updateVoxAndBeats(s){
-  const tag = $('voxTag');
-  const txt = $('voxText');
-  const bar = $('voxBar');
-
-  // Trigger scheduled coughs & vowel
-  if(Array.isArray(s.coughAt)){
-    s.coughAt.forEach((ms, idx) => {
-      if(S.t >= ms && !S.firedCoughs.has(idx)){
-        S.firedCoughs.add(idx);
-        S.burst = 1.0;
-        SFX.playCough();
-      }
-    });
-  }
-  if(typeof s.vowelAt === 'number' && S.t >= s.vowelAt && !S.firedVowel){
-    S.firedVowel = true;
-    SFX.playVowel(4.2);
-  }
-
-  // Reels beat pills pop-in
-  if(s.beats){
-    const spans = $('reelBeat').querySelectorAll('span');
-    s.beats.forEach((b, idx) => {
-      if(S.t >= b.at && !S.firedBeats.has(idx)){
-        S.firedBeats.add(idx);
-        if(spans[idx]) spans[idx].classList.add('pop');
-      }
-    });
-  }
-
-  // Exit caption smoothly right before scene ends
-  const cp = $('cap');
-  if(!s.end && s.d - S.t < 240 && !cp.classList.contains('out')){
-    cp.classList.add('out');
-  }
-
-  // Live acoustic indicator badge
-  if(S.burst > 0.12){
-    tag.className = 'on cough';
-    txt.textContent = 'Cough burst · piezo spike';
-    bar.style.width = Math.min(100, Math.round(S.burst * 100)) + '%';
-  }else if(SFX.vowelActive){
-    const remain = typeof s.vowelAt === 'number' ? Math.max(0, 1 - (S.t - s.vowelAt) / 4200) : 0.7;
-    tag.className = 'on vowel';
-    txt.textContent = '10s /aː/ vowel · steady throat tone';
-    bar.style.width = Math.round(remain * 100) + '%';
-  }else if(S.i === 1 && !S.pause){
-    tag.className = 'on';
-    txt.textContent = 'Listening to neck vibration…';
-    bar.style.width = '24%';
-  }else{
-    tag.className = '';
-    bar.style.width = '0%';
-  }
-}
-
 function frame(now){
   const dt = Math.min(.1, (now - last) / 1000);
   last = now;
   const T = now / 1000;
-  const s = SC[S.i] || SC[0];
+  const s = SC[S.i];
 
   if(!S.pause){
     S.t += dt * 1000;
-    updateVoxAndBeats(s);
     if(S.t >= s.d && S.i < SC.length - 1) go(S.i + 1);
   }
 
-  // Vitals tween
+  /* Trigger Reels keyword pills */
+  if(s.beats){
+    s.beats.forEach((b, idx) => {
+      if(S.t >= b.at && !S.firedBeats.has(idx)){
+        S.firedBeats.add(idx);
+        const pill = $('reelBeat').querySelector(`[data-b="${idx}"]`);
+        if(pill) pill.classList.add('pop');
+      }
+    });
+  }
+
+  /* Trigger acoustic events (cough bursts + 10s vowel) */
+  let kc = 0;
+  if(!S.pause && s.coughAt){
+    s.coughAt.forEach((tMark, idx) => {
+      if(S.t >= tMark && !S.firedCoughs.has(idx)){
+        S.firedCoughs.add(idx);
+        SFX.playCough();
+      }
+      const elapsed = S.t - tMark;
+      if(elapsed >= 0 && elapsed < 780){
+        kc = Math.max(kc, Math.sin(elapsed / 780 * Math.PI));
+      }
+    });
+  }
+
+  let vowelProgress = 0;
+  if(!S.pause && typeof s.vowelAt === 'number'){
+    if(S.t >= s.vowelAt && !S.firedVowel){
+      S.firedVowel = true;
+      SFX.playVowel(3.6);
+    }
+    const vElapsed = S.t - s.vowelAt;
+    if(vElapsed >= 0 && vElapsed <= 3600){
+      vowelProgress = vElapsed / 3600;
+    }
+  }
+
+  /* Update live acoustic badge */
+  const voxTag = $('voxTag'), voxText = $('voxText'), voxBar = $('voxBar');
+  if(kc > 0.05){
+    voxTag.className = 'on cough';
+    voxText.textContent = 'Cough Burst Detected';
+    voxBar.style.width = Math.round(kc * 100) + '%';
+  }else if(vowelProgress > 0){
+    voxTag.className = 'on vowel';
+    const simSec = Math.min(10, Math.max(1, Math.ceil(vowelProgress * 10)));
+    voxText.textContent = `Sustained Vowel /aː/ · ${simSec}s / 10s`;
+    voxBar.style.width = Math.round(vowelProgress * 100) + '%';
+  }else{
+    voxTag.classList.remove('on');
+  }
+
+  /* Vitals tween */
   const k = 1 - Math.exp(-dt * 3);
   for(const q of ['spo2', 'hr', 'vib']) S.v[q] += (S.tgt[q] - S.v[q]) * k;
 
-  // Scan progress
+  /* Scan progress */
   let prog = S.i < 5 ? 0 : S.i > 6 ? 1 : null;
   if(s.scan) prog = Math.max(0, Math.min(1, (S.t - s.scan[0]) / s.scan[1]));
   if(prog === null) prog = 1;
   S.pr = prog;
 
-  // Camera
-  tp.set(...s.cam); tl.set(...s.look);
+  /* Camera */
+  tp.set(...s.cam);
+  tl.set(...s.look);
   const ck = 1 - Math.exp(-dt * 1.6);
-  camP.lerp(tp, ck); camL.lerp(tl, ck);
+  camP.lerp(tp, ck);
+  camL.lerp(tl, ck);
   cam.position.set(camP.x + Math.sin(T * .35) * .18, camP.y + Math.sin(T * .27) * .1, camP.z);
   cam.lookAt(camL);
 
-  // Cough / vowel animation
-  S.burst = Math.max(0, S.burst - dt * 1.65);
-  const kc = S.burst;
+  /* Animate patient & sensors */
   const vib = S.v.vib;
+  const activeStim = Math.max(kc, vowelProgress > 0 ? .65 : 0);
   rings.forEach(r => {
     const u = (T * .7 + r.userData.o) % 1;
-    r.scale.setScalar(1 + u * 3.2);
+    r.scale.setScalar(1 + u * (3.2 + activeStim * 1.2));
     r.material.opacity = (1 - u) * (.3 + vib * .7) * (s.f === 0 ? 1 : .45);
   });
 
-  headG.rotation.x = -.14 * kc + (SFX.vowelActive ? .03 * Math.sin(T * 5) : 0);
-  chest.scale.set(1.05 + kc * .04, 1, .68 * (1 + Math.sin(T * 1.6) * .03 + kc * .05));
+  torso.rotation.x = .03 + Math.sin(T * 1.6) * .018 + kc * .13;
+  headG.rotation.x = -.04 + kc * .16 - (vowelProgress > 0 ? .04 : 0);
+  chest.scale.set(1 + kc * .045, 1, .64 * (1 + Math.sin(T * 1.6) * .03 + kc * .06));
   burstRing.material.opacity = .9 * kc;
-  burstRing.scale.setScalar(1 + kc * 3);
+  burstRing.scale.setScalar(1 + kc * 3.2);
+  S.burst = kc > .05 ? 1 : 0;
 
-  // ESP32 exploded showcase
-  S.ex += (((s.f === 4) ? 1 : 0) - S.ex) * k;
-  chip.position.y = .14 + S.ex * .5;
-  can.position.y = .17 + S.ex * 1.0;
+  /* ESP32-S3 showcase tilt & exploded view */
+  const focusEsp = (s.f === 2 || s.f === 4) ? 1 : 0;
+  S.espFocus = (S.espFocus || 0) + (focusEsp - (S.espFocus || 0)) * k;
+  S.ex = (S.ex || 0) + (((s.f === 4) ? 1 : 0) - (S.ex || 0)) * k;
+
+  eg.rotation.x = -.5 + S.espFocus * .78;
+  eg.rotation.y = Math.sin(T * .55) * .14 + S.espFocus * .22;
+  eg.rotation.z = Math.sin(T * .4) * .04 * S.espFocus;
+  eg.position.y = -.2 + S.espFocus * .28;
+
+  chip.position.y = .12 + S.ex * .55;
+  chipGlow.position.y = .185 + S.ex * .55;
+  chipGlow.material.opacity = .18 + S.ex * (.35 + .2 * Math.sin(T * 6));
+  can.position.y = .16 + S.ex * 1.05;
+  ant.position.y = .10 + S.ex * .35;
+  eled.visible = Math.sin(T * 8) > -.3;
+
+  syncAnchors();
 
   led.material.opacity = .6 + Math.sin(T * 10) * .4;
   beam.material.opacity = .35 + Math.abs(Math.sin(T * 5.2 * S.v.hr / 74)) * .5;
-  eled.visible = Math.sin(T * 8) > -.3;
-
   packets.forEach(p => {
     const u = (T * p.userData.s + p.userData.o) % 1;
     p.position.copy(p.userData.k.getPoint(u));
     p.scale.setScalar(.6 + Math.sin(u * Math.PI) * .8);
   });
 
-  eg.rotation.y = Math.sin(T * .5) * .12 + S.ex * .22;
   ph.rotation.y = -.28 + Math.sin(T * .4) * .05;
 
-  // Floating 3D labels
+  /* Labels */
   const show = [s.f === 0, s.f === 1, s.f === 2 || s.f === 3, s.f === 3, s.f === 2];
-  [LB[0], LB[1], LB[2], LB[3], usb].forEach((l, idx) => {
-    lblA[idx] += ((show[idx] ? 1 : 0) - lblA[idx]) * k;
-    l.material.opacity = lblA[idx];
+  [LB[0], LB[1], LB[2], LB[3], usb].forEach((l, i) => {
+    lblA[i] += ((show[i] ? 1 : 0) - lblA[i]) * k;
+    l.material.opacity = lblA[i];
   });
 
-  // Phone & triage verdict
+  /* Verdict & HUD */
   const d = decide(), showRes = prog >= 1 && S.i >= 5 && S.i < 7;
   drawPhone(d, showRes, prog);
   const v = $('ver');
@@ -1245,27 +1604,26 @@ function frame(now){
     $('vt').textContent = prog >= 1 ? d.t : 'Reading both sensors…';
     $('vw').textContent = prog >= 1 ? d.w : 'Local model running offline.';
   }
-
   $('l1').textContent = vib >= .45 ? 'Elevated' : 'Baseline';
   $('l1').style.color = vib >= .45 ? '#F2A93B' : '#38C4B3';
   $('l2').textContent = `SpO₂ ${Math.round(S.v.spo2)}% · ${Math.round(S.v.hr)} bpm`;
   $('l2').style.color = S.v.spo2 < 92 ? '#FF7A70' : '#6BB1FF';
-  $('hud').style.opacity = (S.i > 0 && S.i < 7 && S.i !== 4) ? 1 : 0;
+  $('hud').style.opacity = S.i > 0 && S.i < 7 && S.i !== 4 ? 1 : 0;
 
   wave('c1', T, 'pz');
   wave('c2', T, 'pp');
   $('chip').style.opacity = S.i === 4 ? 1 : 0;
   drawChip(T);
 
-  document.querySelectorAll('#prog b').forEach((b, idx) => {
-    b.style.width = (idx < S.i ? 100 : idx === S.i ? Math.min(100, S.t / s.d * 100) : 0) + '%';
+  document.querySelectorAll('#prog b').forEach((b, i) => {
+    b.style.width = (i < S.i ? 100 : i === S.i ? Math.min(100, S.t / s.d * 100) : 0) + '%';
   });
 
   R.render(sc, cam);
   requestAnimationFrame(frame);
 }
 
-/* ---------- controls ---------- */
+/* ---------- Controls ---------- */
 let idleT;
 const wake = () => {
   document.body.classList.remove('idle');
@@ -1273,23 +1631,26 @@ const wake = () => {
   idleT = setTimeout(() => document.body.classList.add('idle'), 2200);
 };
 addEventListener('mousemove', wake);
-addEventListener('pointerdown', () => { SFX.ensure(); wake(); }, {passive:true});
-addEventListener('touchstart', () => { SFX.ensure(); wake(); }, {passive:true});
 wake();
-SFX.ensure();
-SFX.syncUI();
+
 addEventListener('keydown', e => {
   if(e.code === 'Space'){
     e.preventDefault();
     S.pause = !S.pause;
-    if(S.pause) SFX.stopVowel();
-  }else if(e.code === 'ArrowRight') go(S.i + 1);
-  else if(e.code === 'ArrowLeft') go(S.i - 1);
-  else if(e.key === 'r' || e.key === 'R'){ S.v = {...SYM}; go(0); }
-  else if(e.key === 'f' || e.key === 'F'){
+  }else if(e.code === 'ArrowRight'){
+    go(S.i + 1);
+  }else if(e.code === 'ArrowLeft'){
+    go(S.i - 1);
+  }else if(e.key === 'r' || e.key === 'R'){
+    S.v = {...SYM};
+    go(0);
+  }else if(e.key === 'f' || e.key === 'F'){
     document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-  }else if(e.key === 'm' || e.key === 'M') SFX.toggleMute();
-  else if(e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
+  }else if(e.key === 'm' || e.key === 'M'){
+    SFX.toggleMute();
+  }else if(e.key === 'h' || e.key === 'H'){
+    document.body.classList.toggle('clean');
+  }
 });
 
 go(0);
