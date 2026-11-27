@@ -467,7 +467,7 @@ $('gateLogo').innerHTML = brandMarkSVG('');
 
 /* ---------- Passcode Verification (Salted SHA-256 Digest) ---------- */
 const ACCESS_SALT = 'rt-demo-v1:';
-const ACCESS_DIGEST = '6b9321899a11e7302e887a6a12c38f7c4ecbf61d3be6c470b14d9f1d0d47e944';
+const ACCESS_DIGEST = '6c4c63526d06bc867e5f23f5d47141f00178d6b801e565e109f4c4c9df6f89f7';
 let isUnlocked = false;
 
 function sha256Pure(bytes){
@@ -543,7 +543,7 @@ $('gateForm').addEventListener('submit', async e => {
   e.preventDefault();
   const inp = $('gateInput');
   const err = $('gateErr');
-  const candidate = inp.value;
+  const candidate = inp.value.trim();
   err.textContent = '';
   const computed = await digestPasscode(candidate);
   if(computed === ACCESS_DIGEST){
