@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RespiTriage — Interactive Workbench Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-workbench: #F5F1E6;
+      --bg-card: #FFFDF9;
+      --bg-cream: #FAF6EE;
+      --ink-primary: #1E293B;
+      --ink-muted: #475569;
+      --accent-teal: #0F766E;
+      --accent-sky: #0284C7;
+      --accent-amber: #D97706;
+      --accent-green: #16A34A;
+      --accent-red: #DC2626;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-workbench);
+      background-image:
+        linear-gradient(to right, rgba(30, 41, 59, 0.045) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(30, 41, 59, 0.045) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: var(--ink-primary);
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    }
+
+    .hud-box {
+      background-color: var(--bg-card);
+      border: 2px solid var(--ink-primary);
+      box-shadow: 3px 3px 0px var(--ink-primary);
+    }
+
+    .hud-box-cream {
+      background-color: var(--bg-cream);
+      border: 1.5px solid rgba(30, 41, 59, 0.25);
+    }
+
+    .workbench-panel {
+      background-color: var(--bg-card);
+      border: 2px solid var(--ink-primary);
+      box-shadow: 4px 4px 0px var(--ink-primary);
+    }
+
+    .lab-btn {
+      border: 2px solid var(--ink-primary);
+      box-shadow: 2px 2px 0px var(--ink-primary);
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease;
+    }
+
+    .lab-btn:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0px var(--ink-primary);
+    }
+
+    .lab-btn:active {
+      transform: translate(1px, 1px);
+      box-shadow: 1px 1px 0px var(--ink-primary);
+    }
+
+    /* Smooth camera pan & zoom transition for the interactive hardware diagram */
+    #hardwareStageViewport {
+      transform-origin: center center;
+      transition: transform 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform;
+    }
+
+    @keyframes pulseRing {
+      0% {
+        transform: scale(0.92);
+        opacity: 0.85;
+      }
+      100% {
+        transform: scale(1.65);
+        opacity: 0;
+      }
+    }
+
+    .ripple-ring {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pulseRing 2.1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+    }
+
+    @keyframes dashFlow {
+      to {
+        stroke-dashoffset: -28;
+      }
+    }
+
+    .signal-dash {
+      stroke-dasharray: 7 7;
+      animation: dashFlow 1.1s linear infinite;
+    }
+
+    .signal-dash-slow {
+      stroke-dasharray: 8 8;
+      animation: dashFlow 2.2s linear infinite;
+    }
+
+    @keyframes oximeterGlow {
+      0%, 100% {
+        opacity: 0.35;
+      }
+      50% {
+        opacity: 0.95;
+      }
+    }
+
+    .oximeter-beam {
+      animation: oximeterGlow 1.15s ease-in-out infinite;
+    }
+
+    @keyframes phoneScanPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.35);
+      }
+      50% {
+        box-shadow: 0 0 0 10px rgba(2, 132, 199, 0);
+      }
+    }
+
+    .phone-scanning {
+      animation: phoneScanPulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes packetTravel {
+      0% {
+        offset-distance: 0%;
+        opacity: 0;
+      }
+      12% {
+        opacity: 1;
+      }
+      88% {
+        opacity: 1;
+      }
+      100% {
+        offset-distance: 100%;
+        opacity: 0;
+      }
+    }
+
+    .data-packet {
+      offset-rotate: 0deg;
+      animation: packetTravel 1.8s linear infinite;
+    }
+
+    .packet-neck {
+      offset-path: path('M 114 114 C 160 114, 170 132, 210 132');
+    }
+
+    .packet-oximeter {
+      offset-path: path('M 128 222 C 172 222, 175 158, 210 158');
+      animation-delay: 0.55s;
+    }
+
+    .packet-otg {
+      offset-path: path('M 306 145 L 444 145');
+      animation-duration: 1.35s;
+    }
+
+    @keyframes acousticBurst {
+      0% {
+        r: 10;
+        opacity: 0.95;
+        stroke-width: 3;
+      }
+      100% {
+        r: 44;
+        opacity: 0;
+        stroke-width: 0.8;
+      }
+    }
+
+    .cough-burst-active {
+      animation: acousticBurst 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .active-focus-glow {
+      filter: drop-shadow(0 0 6px rgba(15, 118, 110, 0.45));
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-teal-200 selection:text-slate-900">
+  <div class="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
+
+    <!-- Top Workbench Header Bar -->
+    <header class="hud-box rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-[#0F766E] text-white border-2 border-[#1E293B] flex items-center justify-center font-mono font-bold text-sm shrink-0">
+          RT
+        </div>
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-extrabold tracking-tight text-[#1E293B]">
+              RespiTriage
+            </h1>
+            <span class="px-2 py-0.5 rounded bg-[#FAF6EE] border border-[#1E293B] font-mono text-[11px] font-bold text-[#0F766E]">
+              OFFLINE ASHA TRIAGE DEMO
+            </span>
+          </div>
+          <p class="text-xs text-[#475569]">
+            Tracheal Vibration + Fingertip Pulse Oximeter + ESP32-S3 + On-Device LiteRT Edge AI
+          </p>
+        </div>
+      </div>
+
+      <!-- Top Action Controls: Auto-Tour, Detached Walkthrough, Slow Auto-Demo -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="autoTourBtn" type="button" onclick="toggleAutoTour()" class="lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold">
+          ↻ AUTO-TOUR: OFF
+        </button>
+
+        <button id="detachedModeBtn" type="button" onclick="toggleDetachedWalkthroughMode()" class="lab-btn px-3 py-1.5 rounded-lg bg-white text-[#1E293B] font-mono text-xs font-bold">
+          ⤢ DETACHED WALKTHROUGH
+        </button>
+
+        <div class="flex flex-wrap items-center gap-1.5 p-1 rounded-lg bg-[#FAF6EE] border-2 border-[#1E293B]">
+          <button id="slowDemoPlayBtn" type="button" onclick="toggleSlowDemoPlayPause()" class="lab-btn px-2.5 py-1 rounded-md bg-[#0F766E] text-white font-mono text-[11px] font-bold">
+            ▶ SLOW DEMO
+          </button>
+          <button id="slowDemoStopBtn" type="button" onclick="stopSlowDemo()" class="lab-btn px-2 py-1 rounded-md bg-white text-[#1E293B] font-mono text-[11px] font-bold">
+            ■ STOP
+          </button>
+          <select id="slowDemoSpeedSelect" onchange="changeSlowDemoSpeed(this.value)" aria-label="Slow Demo Speed" class="px-2 py-1 rounded-md bg-white border border-[#1E293B] font-mono text-[11px] font-bold text-[#1E293B]">
+            <option value="0.5">0.5x ULTRA-SLOW</option>
+            <option value="0.75">0.75x SLOW</option>
+            <option value="1" selected>1.0x GENTLE</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- Slow Auto-Demo Narrative Banner (Shown when Slow Demo is active or paused mid-story) -->
+    <section id="slowDemoBanner" class="hidden hud-box rounded-xl p-3.5 bg-[#FFFDF9] space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <span id="slowDemoBadge" class="px-2 py-0.5 rounded bg-[#0284C7] text-white font-mono text-[10px] font-bold">
+            SLOW DEMO ACTIVE
+          </span>
+          <span id="slowDemoSceneTitle" class="font-mono text-xs font-bold text-[#1E293B]">
+            Scene 1/6: Tracheal Neck Clip
+          </span>
+        </div>
+        <span id="slowDemoTimerLabel" class="font-mono text-[11px] text-[#475569]">
+          Auto-pauses on manual click
+        </span>
+      </div>
+      <p id="slowDemoCaption" class="text-xs sm:text-sm text-[#1E293B] leading-relaxed">
+        The silicone neck clip rests gently against the throat to sense skin vibrations during a cough or 10-second vowel sound while ignoring room noise.
+      </p>
+      <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden border border-[#1E293B]">
+        <div id="slowDemoProgressBar" class="h-full bg-[#0F766E] transition-all duration-150" style="width: 0%;"></div>
+      </div>
+    </section>
+
+    <!-- Main 12-Column Workbench Grid -->
+    <section id="mainWorkbenchGrid" class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+
+      <!-- Left Column (3 cols): Triage Simulator Controls -->
+      <aside id="triageSimulatorColumn" class="lg:col-span-3 space-y-4">
+        <div class="hud-box rounded-xl p-4 space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <h2 class="font-mono text-xs font-bold uppercase tracking-wider text-[#1E293B]">
+              TRIAGE SIMULATOR
+            </h2>
+            <span class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-[#0F766E] border border-teal-300">
+              OFFLINE AI
+            </span>
+          </div>
+
+          <!-- Scenario Presets -->
+          <div class="space-y-1.5">
+            <label class="block font-mono text-[11px] font-bold text-[#475569]">
+              PATIENT SCENARIO PRESETS
+            </label>
+            <div class="grid grid-cols-1 gap-1.5">
+              <button type="button" onclick="applyPreset('healthy')" class="lab-btn text-left px-3 py-2 rounded-lg bg-[#FAF6EE] text-xs font-semibold text-[#1E293B]">
+                1. Healthy Baseline (SpO₂ 98%, Normal)
+              </button>
+              <button type="button" onclick="applyPreset('yellow')" class="lab-btn text-left px-3 py-2 rounded-lg bg-[#FAF6EE] text-xs font-semibold text-[#1E293B]">
+                2. Symptomatic + Abnormal Vibration (Yellow)
+              </button>
+              <button type="button" onclick="applyPreset('low_spo2')" class="lab-btn text-left px-3 py-2 rounded-lg bg-[#FAF6EE] text-xs font-semibold text-[#1E293B]">
+                3. Low SpO₂ &lt; 92% Hypoxemia (Red)
+              </button>
+              <button type="button" onclick="applyPreset('red_flag')" class="lab-btn text-left px-3 py-2 rounded-lg bg-[#FAF6EE] text-xs font-semibold text-[#1E293B]">
+                4. Red-Flag Symptoms Override (Red)
+              </button>
+            </div>
+          </div>
+
+          <!-- SpO2 Slider -->
+          <div class="space-y-1.5 pt-1">
+            <div class="flex items-center justify-between text-xs font-semibold">
+              <label for="spo2Input" class="text-[#1E293B]">Blood Oxygen (SpO₂)</label>
+              <span id="spo2ValueDisplay" class="font-mono font-bold text-[#0F766E]">98%</span>
+            </div>
+            <input id="spo2Input" type="range" min="82" max="100" value="98" oninput="updateControlsFromUI()" class="w-full accent-[#0F766E] cursor-pointer" />
+            <div class="flex justify-between font-mono text-[10px] text-[#475569]">
+              <span>82%</span>
+              <span>92% Threshold</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          <!-- Heart Rate Slider -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-semibold">
+              <label for="hrInput" class="text-[#1E293B]">Pulse Rate</label>
+              <span id="hrValueDisplay" class="font-mono font-bold text-[#0284C7]">74 BPM</span>
+            </div>
+            <input id="hrInput" type="range" min="52" max="140" value="74" oninput="updateControlsFromUI()" class="w-full accent-[#0284C7] cursor-pointer" />
+          </div>
+
+          <!-- Tracheal Vibration Score -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs font-semibold">
+              <label for="vibInput" class="text-[#1E293B]">Tracheal Vibration Score</label>
+              <span id="vibValueDisplay" class="font-mono font-bold text-[#1E293B]">0.18</span>
+            </div>
+            <input id="vibInput" type="range" min="0.05" max="0.95" step="0.01" value="0.18" oninput="updateControlsFromUI()" class="w-full accent-[#1E293B] cursor-pointer" />
+          </div>
+
+          <!-- Checkboxes for Symptoms & Red Flags -->
+          <div class="space-y-2 pt-1 border-t border-slate-200 text-xs">
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-[#1E293B]">
+              <input id="symptomaticCheckbox" type="checkbox" onchange="updateControlsFromUI()" class="rounded border-[#1E293B] text-[#0F766E]" />
+              <span>Cough / respiratory symptoms present</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer font-medium text-[#DC2626]">
+              <input id="redFlagCheckbox" type="checkbox" onchange="updateControlsFromUI()" class="rounded border-[#DC2626] text-[#DC2626]" />
+              <span>Red-flag signs (fever &gt; 2 wks, blood, weight loss)</span>
+            </label>
+          </div>
+
+          <!-- Run Scan Button -->
+          <button id="runScanBtn" type="button" onclick="startTriageScan()" class="lab-btn w-full py-2.5 px-4 rounded-lg bg-[#0F766E] text-white font-mono text-xs font-bold tracking-wide">
+            ▶ RUN 30s TRIAGE SCAN
+          </button>
+        </div>
+      </aside>
+
+      <!-- Center Column (6 cols): Interactive Step Walkthrough + Clean Vector Hardware Stage + Android Phone -->
+      <div id="centerWalkthroughColumn" class="lg:col-span-6 space-y-4">
+        <div class="workbench-panel rounded-2xl p-4 sm:p-5 space-y-4">
+
+          <!-- Step Walkthrough Bar (Steps 1-4) -->
+          <div id="stepWalkthroughContainer" class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="font-mono text-xs font-bold uppercase text-[#1E293B]">
+                  STEP WALKTHROUGH
+                </span>
+                <span id="detachedBadge" class="hidden px-2 py-0.5 rounded bg-[#0F766E] text-white font-mono text-[10px] font-bold">
+                  DETACHED VIEW • SIMULATOR HIDDEN
+                </span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="walkthroughStatusText" class="font-mono text-[11px] font-bold text-[#0284C7]">
+                  Step 1/4: Neck Vibration Capture
+                </span>
+                <button id="returnFullWorkbenchBtn" type="button" onclick="toggleDetachedWalkthroughMode()" class="hidden lab-btn px-2.5 py-1 rounded-md bg-[#FAF6EE] text-[#1E293B] font-mono text-[10px] font-bold">
+                  ↙ SHOW SIMULATOR
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="walkthroughSteps">
+              <button type="button" data-step="1" onclick="setWalkthroughStep(1)" class="step-pill lab-btn p-2.5 rounded-lg text-left bg-[#0F766E] text-white">
+                <div class="font-mono text-[10px] opacity-85">STEP 01</div>
+                <div class="text-xs font-bold leading-tight">Neck Clip</div>
+              </button>
+              <button type="button" data-step="2" onclick="setWalkthroughStep(2)" class="step-pill lab-btn p-2.5 rounded-lg text-left bg-[#FAF6EE] text-[#1E293B]">
+                <div class="font-mono text-[10px] text-[#475569]">STEP 02</div>
+                <div class="text-xs font-bold leading-tight">Pulse Oximeter</div>
+              </button>
+              <button type="button" data-step="3" onclick="setWalkthroughStep(3)" class="step-pill lab-btn p-2.5 rounded-lg text-left bg-[#FAF6EE] text-[#1E293B]">
+                <div class="font-mono text-[10px] text-[#475569]">STEP 03</div>
+                <div class="text-xs font-bold leading-tight">ESP32-S3 &amp; OTG</div>
+              </button>
+              <button type="button" data-step="4" onclick="setWalkthroughStep(4)" class="step-pill lab-btn p-2.5 rounded-lg text-left bg-[#FAF6EE] text-[#1E293B]">
+                <div class="font-mono text-[10px] text-[#475569]">STEP 04</div>
+                <div class="text-xs font-bold leading-tight">LiteRT Triage</div>
+              </button>
+            </div>
+
+            <p id="stepDetailCaption" class="text-xs text-[#475569] bg-[#FAF6EE] border border-slate-200 rounded-lg px-3 py-2">
+              An IP65 silicone neck clip with a piezoelectric sensor sits against the throat to record cough and 10-second vowel vibrations without ambient room noise.
+            </p>
+          </div>
+
+          <!-- Hardware & Android Smartphone Stage -->
+          <div class="relative overflow-hidden rounded-xl border-2 border-[#1E293B] bg-[#FAF6EE] p-3 sm:p-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-[10px] font-bold uppercase text-[#475569]">
+                  HARDWARE &amp; OFFLINE PHONE STAGE
+                </span>
+                <span id="stageActionBadge" class="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-white border border-[#1E293B] text-[#0F766E]">
+                  LIVE STREAMING
+                </span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="triggerCoughOrVowelBurst()" class="px-2 py-0.5 rounded bg-[#0F766E] text-white border border-[#1E293B] font-mono text-[10px] font-bold hover:bg-[#0d5e57]">
+                  ⚡ SIMULATE COUGH / 10s VOWEL
+                </button>
+                <button type="button" onclick="resetStageCamera()" class="px-2 py-0.5 rounded bg-white border border-[#1E293B] font-mono text-[10px] font-bold text-[#1E293B] hover:bg-slate-100">
+                  RESET VIEW
+                </button>
+              </div>
+            </div>
+
+            <div id="hardwareStageViewport" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+
+              <!-- Left/Center Vector Diagram: Clean Neck Profile + Fingertip Oximeter + ESP32-S3 Module -->
+              <div class="md:col-span-7 bg-white rounded-xl border-2 border-[#1E293B] p-2">
+                <svg viewBox="0 0 460 270" class="w-full h-auto block" role="img" aria-label="RespiTriage neck vibration clip, fingertip pulse oximeter, and ESP32-S3 module">
+                  <!-- Background subtle lab grid -->
+                  <defs>
+                    <pattern id="svgGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+                      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#E2E8F0" stroke-width="0.7" />
+                    </pattern>
+                  </defs>
+                  <rect width="460" height="270" fill="url(#svgGrid)" rx="8" />
+
+                  <!-- Ambient noise lines on left (shown as filtered out) -->
+                  <g id="ambientNoiseGroup" opacity="0.65">
+                    <path d="M 14 48 Q 22 38, 30 48 T 46 48" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 2" />
+                    <path d="M 14 62 Q 24 72, 34 62 T 54 62" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="3 2" />
+                    <text x="14" y="34" font-family="JetBrains Mono, monospace" font-size="8" fill="#64748B">NOISE REJECTED</text>
+                  </g>
+
+                  <!-- Clean Side-Profile Neck & Throat Silhouette -->
+                  <g id="neckSensorGroup" class="cursor-pointer" onclick="setWalkthroughStep(1)">
+                    <path d="M 88 26 C 114 26, 132 45, 132 72 C 132 88, 124 98, 118 106 L 122 152 L 62 152 L 68 102 C 60 88, 60 26, 88 26 Z"
+                          fill="#F1F5F9" stroke="#1E293B" stroke-width="2" />
+                    <!-- Subtle trachea line -->
+                    <line x1="94" y1="96" x2="94" y2="146" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4 3" />
+
+                    <!-- Piezoelectric Tracheal Neck Clip -->
+                    <rect x="86" y="102" width="28" height="24" rx="6" fill="#0F766E" stroke="#1E293B" stroke-width="2" />
+                    <circle cx="91" cy="114" r="3" fill="#CCFBF1" />
+
+                    <!-- Animated Vibration Ripples around Neck Clip -->
+                    <circle id="neckRipple1" cx="100" cy="114" r="14" fill="none" stroke="#0284C7" stroke-width="1.8" class="ripple-ring" />
+                    <circle id="neckRipple2" cx="100" cy="114" r="20" fill="none" stroke="#0F766E" stroke-width="1.2" class="ripple-ring" style="animation-delay: 0.7s;" />
+                    <circle id="coughBurstRing" cx="100" cy="114" r="10" fill="none" stroke="#D97706" stroke-width="0" opacity="0" />
+
+                    <text x="58" y="168" font-family="JetBrains Mono, monospace" font-size="9" font-weight="700" fill="#1E293B">TRACHEAL CLIP</text>
+                  </g>
+
+                  <!-- Clean Horizontal Fingertip in Pulse Oximeter -->
+                  <g id="oximeterSensorGroup" class="cursor-pointer" onclick="setWalkthroughStep(2)">
+                    <!-- Clean Finger Silhouette -->
+                    <path d="M 52 212 L 106 212 C 116 212, 122 217, 122 223 C 122 229, 116 234, 106 234 L 52 234 Z"
+                          fill="#F1F5F9" stroke="#1E293B" stroke-width="2" />
+                    <!-- Nail highlight -->
+                    <rect x="103" y="215" width="12" height="6" rx="2.5" fill="#E2E8F0" stroke="#475569" stroke-width="1" />
+
+                    <!-- Clip-on Pulse Oximeter Shell -->
+                    <rect x="86" y="203" width="42" height="39" rx="7" fill="none" stroke="#0284C7" stroke-width="2.2" />
+                    <!-- Optical LED beam -->
+                    <line x1="107" y1="206" x2="107" y2="239" stroke="#EF4444" stroke-width="2" class="oximeter-beam" />
+
+                    <text x="58" y="256" font-family="JetBrains Mono, monospace" font-size="9" font-weight="700" fill="#1E293B">PULSE OXIMETER</text>
+                  </g>
+
+                  <!-- Central ESP32-S3 Signal Conditioning Module -->
+                  <g id="esp32ModuleGroup" class="cursor-pointer" onclick="setWalkthroughStep(3)">
+                    <rect x="210" y="112" width="96" height="66" rx="8" fill="#FAF6EE" stroke="#1E293B" stroke-width="2.2" />
+                    <rect x="220" y="122" width="46" height="32" rx="4" fill="#1E293B" />
+                    <text x="225" y="141" font-family="JetBrains Mono, monospace" font-size="8.5" font-weight="700" fill="#FAF6EE">ESP32-S3</text>
+                    <circle cx="284" cy="128" r="4" fill="#16A34A" />
+                    <text x="273" y="144" font-family="JetBrains Mono, monospace" font-size="7.5" font-weight="700" fill="#0F766E">SQI OK</text>
+                    <text x="218" y="168" font-family="JetBrains Mono, monospace" font-size="8" font-weight="700" fill="#475569">FILTER + ADC</text>
+                    <text x="218" y="192" font-family="JetBrains Mono, monospace" font-size="9" font-weight="700" fill="#1E293B">CENTRAL MODULE</text>
+                  </g>
+
+                  <!-- Wires from Sensors to ESP32-S3 -->
+                  <path d="M 114 114 C 160 114, 170 132, 210 132" fill="none" stroke="#0F766E" stroke-width="2.2" class="signal-dash" />
+                  <path d="M 128 222 C 172 222, 175 158, 210 158" fill="none" stroke="#0284C7" stroke-width="2.2" class="signal-dash" />
+
+                  <!-- USB-C OTG Link to Right Side (Android Phone) -->
+                  <path d="M 306 145 L 444 145" fill="none" stroke="#D97706" stroke-width="2.6" class="signal-dash-slow" />
+                  <rect x="332" y="126" width="84" height="15" rx="4" fill="#FEF3C7" stroke="#D97706" stroke-width="1.2" />
+                  <text x="338" y="136.5" font-family="JetBrains Mono, monospace" font-size="8" font-weight="700" fill="#92400E">USB-C OTG LINK</text>
+
+                  <!-- Animated Data Packets Along Sensor & OTG Links -->
+                  <circle r="3.6" fill="#0F766E" stroke="#FFFFFF" stroke-width="1" class="data-packet packet-neck" />
+                  <circle r="3.6" fill="#0284C7" stroke="#FFFFFF" stroke-width="1" class="data-packet packet-oximeter" />
+                  <rect x="-5" y="-3" width="10" height="6" rx="2" fill="#D97706" stroke="#1E293B" stroke-width="0.9" class="data-packet packet-otg" />
+                </svg>
+              </div>
+
+              <!-- Right Side: Normal Android Smartphone Running Offline Triage App -->
+              <div class="md:col-span-5 flex flex-col items-center">
+                <div id="androidPhoneFrame" onclick="setWalkthroughStep(4)" class="cursor-pointer w-full max-w-[235px] rounded-[28px] bg-[#1E293B] p-2.5 border-2 border-[#1E293B] shadow-md transition-all">
+                  <!-- Top Speaker & Punch-Hole Camera -->
+                  <div class="flex items-center justify-center gap-2 pb-1.5">
+                    <span class="w-8 h-1 rounded-full bg-slate-600"></span>
+                    <span class="w-2 h-2 rounded-full bg-slate-900 border border-slate-500"></span>
+                  </div>
+
+                  <!-- Android Screen -->
+                  <div class="bg-white rounded-[20px] p-3 space-y-2.5 text-left">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                      <span class="font-mono text-[10px] font-bold text-[#0F766E]">RESΡΙTRIAGE OS</span>
+                      <span class="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                        100% OFFLINE
+                      </span>
+                    </div>
+
+                    <div class="bg-[#FAF6EE] rounded-lg p-2 border border-slate-200 space-y-1">
+                      <div class="flex justify-between font-mono text-[10px]">
+                        <span class="text-slate-500">ENGINE:</span>
+                        <span class="font-bold text-[#1E293B]">LiteRT Edge</span>
+                      </div>
+                      <div class="flex justify-between font-mono text-[10px]">
+                        <span class="text-slate-500">SpO₂ / HR:</span>
+                        <span id="phoneSpo2Hr" class="font-bold text-[#0284C7]">98% • 74 BPM</span>
+                      </div>
+                      <div class="flex justify-between font-mono text-[10px]">
+                        <span class="text-slate-500">SQI CHECK:</span>
+                        <span id="phoneSqiStatus" class="font-bold text-[#16A34A]">VERIFIED</span>
+                      </div>
+                    </div>
+
+                    <!-- Scan Progress Bar on Phone -->
+                    <div class="space-y-1">
+                      <div class="flex justify-between font-mono text-[9px] text-slate-600">
+                        <span id="phoneScanState">READY (&lt;30s)</span>
+                        <span id="phoneScanPercent">0%</span>
+                      </div>
+                      <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                        <div id="phoneScanBar" class="h-full bg-[#0284C7] transition-all duration-150" style="width: 0%;"></div>
+                      </div>
+                    </div>
+
+                    <!-- Phone Referral Pill -->
+                    <div id="phoneReferralBadge" class="rounded-lg p-2 bg-green-50 border border-green-500 text-center">
+                      <div id="phoneReferralCode" class="font-mono text-xs font-extrabold text-[#16A34A]">GREEN</div>
+                      <div id="phoneReferralSub" class="text-[10px] font-semibold text-green-900 leading-tight">
+                        Standard Symptom Protocol
+                      </div>
+                    </div>
+
+                    <!-- Bottom Android Navigation Bar -->
+                    <div class="pt-1 flex items-center justify-around text-slate-400 font-mono text-[10px]">
+                      <span>◁</span>
+                      <span class="w-3 h-3 rounded-full border border-slate-400 inline-block"></span>
+                      <span>▢</span>
+                    </div>
+                  </div>
+                </div>
+                <span class="font-mono text-[10px] font-bold text-[#475569] mt-1.5">
+                  ANDROID SMARTPHONE (OFFLINE)
+                </span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Dual Live Waveforms (Tracheal Piezo & Fingertip PPG) -->
+          <div id="liveWaveformsSection" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="hud-box-cream rounded-xl p-3">
+              <div class="flex items-center justify-between font-mono text-[11px] mb-1.5">
+                <span class="font-bold text-[#1E293B]">TRACHEAL PIEZO SIGNAL</span>
+                <span id="piezoLabel" class="font-bold text-[#0F766E]">BASELINE</span>
+              </div>
+              <canvas id="piezoCanvas" onclick="inspectWaveform('piezo', event)" title="Click to inspect vibration sample" class="w-full h-14 rounded bg-white border border-slate-300 cursor-crosshair"></canvas>
+              <div class="flex items-center justify-between gap-2 mt-1.5">
+                <p id="piezoWaveCaption" class="text-[11px] text-slate-600 leading-snug">
+                  Mechanical skin vibration from cough &amp; 10s vowel sound (piezoelectric contact sensor).
+                </p>
+                <span id="piezoInspectReadout" class="font-mono text-[10px] font-bold text-[#0F766E] shrink-0">CLICK WAVE</span>
+              </div>
+            </div>
+            <div class="hud-box-cream rounded-xl p-3">
+              <div class="flex items-center justify-between font-mono text-[11px] mb-1.5">
+                <span class="font-mono font-bold text-[#1E293B]">OXIMETER PPG WAVE</span>
+                <span id="ppgLabel" class="font-bold text-[#16A34A]">SpO₂ 98%</span>
+              </div>
+              <canvas id="ppgCanvas" onclick="inspectWaveform('ppg', event)" title="Click to inspect PPG pulse sample" class="w-full h-14 rounded bg-white border border-slate-300 cursor-crosshair"></canvas>
+              <div class="flex items-center justify-between gap-2 mt-1.5">
+                <p id="ppgWaveCaption" class="text-[11px] text-slate-600 leading-snug">
+                  Photoplethysmogram (PPG) optical blood-volume pulse used to track SpO₂ and heart rate.
+                </p>
+                <span id="ppgInspectReadout" class="font-mono text-[10px] font-bold text-[#0284C7] shrink-0">CLICK WAVE</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right Column (3 cols): Color-Coded Referral Output & Quick Telemetry -->
+      <aside id="referralTelemetryColumn" class="lg:col-span-3 space-y-4">
+        <div id="referralCard" class="hud-box rounded-xl p-4 space-y-3 bg-green-50 border-green-600">
+          <div class="flex items-center justify-between">
+            <span class="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-600">
+              REFERRAL DECISION
+            </span>
+            <span id="referralBadgePill" class="px-2 py-0.5 rounded font-mono text-[11px] font-extrabold bg-[#16A34A] text-white">
+              GREEN
+            </span>
+          </div>
+
+          <h3 id="referralTitle" class="text-base font-extrabold text-[#14532D]">
+            Standard Symptom Protocol
+          </h3>
+
+          <p id="referralDescription" class="text-xs text-slate-700 leading-relaxed">
+            No device-based escalation detected. Persistent cough or symptoms still require standard ASHA clinical assessment.
+          </p>
+
+          <div class="pt-2 border-t border-slate-300/70 space-y-1 font-mono text-[11px]">
+            <div class="flex justify-between">
+              <span class="text-slate-600">SpO₂ Status:</span>
+              <span id="telemetrySpo2" class="font-bold text-[#16A34A]">98% (Normal)</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-600">Vibration Score:</span>
+              <span id="telemetryVib" class="font-bold text-[#1E293B]">0.18</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-600">Red Flags:</span>
+              <span id="telemetryRedFlag" class="font-bold text-[#16A34A]">None</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Architecture Summary -->
+        <div class="hud-box rounded-xl p-4 space-y-2.5">
+          <h3 class="font-mono text-xs font-bold uppercase text-[#1E293B] border-b border-slate-200 pb-1.5">
+            WHY THIS DESIGN
+          </h3>
+          <ul class="space-y-2 text-xs text-[#475569] leading-snug">
+            <li><strong class="text-[#1E293B]">Skin-contact piezo:</strong> Avoids ambient village/household noise that trips up phone microphones.</li>
+            <li><strong class="text-[#1E293B]">100% offline:</strong> Runs on existing Android phones via USB-C OTG with local privacy.</li>
+            <li><strong class="text-[#1E293B]">Low cost:</strong> ~₹1,500 per unit at scale (~₹0.50 per screening over a 3-year lifespan).</li>
+          </ul>
+        </div>
+      </aside>
+
+    </section>
+
+    <!-- Toggleable Drawers / Tabs: Rural Impact & Cost + Field Safeguards & Validation -->
+    <section id="projectDetailsSection" class="hud-box rounded-xl p-4 sm:p-5 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+        <div class="flex flex-wrap gap-2">
+          <button id="tabImpactBtn" type="button" onclick="switchInfoTab('impact')" class="lab-btn px-3 py-1.5 rounded-lg bg-[#0F766E] text-white font-mono text-xs font-bold">
+            RURAL IMPACT &amp; ECONOMICS
+          </button>
+          <button id="tabSafeguardsBtn" type="button" onclick="switchInfoTab('safeguards')" class="lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold">
+            FIELD SAFEGUARDS &amp; VALIDATION
+          </button>
+        </div>
+        <span class="font-mono text-[11px] text-[#475569]">
+          RespiTriage • Accessible Healthcare
+        </span>
+      </div>
+
+      <!-- Tab 1: Rural Impact & Economics -->
+      <div id="panelImpact" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-[#1E293B]">
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#0F766E]">40–80 KM DIAGNOSTIC GAP</div>
+          <p class="text-[#475569] leading-relaxed">
+            Across 6+ lakh villages, remote hamlets of 2,000–3,000 residents often sit far from X-ray, Truenat, or CB-NAAT labs, costing daily-wage families lost income and travel fare.
+          </p>
+        </div>
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#0284C7]">~₹1,500 UNIT COST AT SCALE</div>
+          <p class="text-[#475569] leading-relaxed">
+            Estimated 3-year hardware life with 1,000 screenings/year brings hardware cost down to ~₹0.50 per test, suited for ICMR, BIRAC, or CSR deployment.
+          </p>
+        </div>
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#D97706]">OFFLINE LOCAL PRIVACY</div>
+          <p class="text-[#475569] leading-relaxed">
+            Works with zero mobile data or Wi-Fi required, keeping patient screening data on the local device rather than uploading to external servers.
+          </p>
+        </div>
+      </div>
+
+      <!-- Tab 2: Field Safeguards & Validation -->
+      <div id="panelSafeguards" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-[#1E293B]">
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#0F766E]">1. PREVENTING FALSE NEGATIVES</div>
+          <p class="text-[#475569] leading-relaxed">
+            Red-flag signs (coughing blood, fever &gt; 2 weeks, sudden weight loss) trigger immediate hospital referral regardless of AI or Green status.
+          </p>
+        </div>
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#0284C7]">2. HYGIENE &amp; CALIBRATION</div>
+          <p class="text-[#475569] leading-relaxed">
+            IP65 water-resistant silicone neck clip wipes clean with alcohol wipes between visits; oximeter calibrated across diverse skin tones.
+          </p>
+        </div>
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#D97706]">3. TWO-STAGE VALIDATION</div>
+          <p class="text-[#475569] leading-relaxed">
+            Stage 1 lab tests against noisy phone mics; Stage 2 six-month PHC trial comparing against Truenat, chest X-rays, and sputum tests under CDSCO norms.
+          </p>
+        </div>
+        <div class="hud-box-cream rounded-xl p-3.5 space-y-1">
+          <div class="font-mono font-bold text-[#16A34A]">4. GRAM SABHA TRUST</div>
+          <p class="text-[#475569] leading-relaxed">
+            ASHAs demonstrate the painless, non-invasive neck clip on themselves during village Gram Sabha meetings before home screening begins.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Prominent Clinical Disclaimer Footer -->
+    <footer class="hud-box rounded-xl px-4 py-3 text-center text-xs text-[#475569]">
+      <strong class="text-[#1E293B]">Clinical Decision-Support Notice:</strong> RespiTriage is a portable, offline screening and triage aid designed to support ASHA workers—it is <em>not</em> a standalone medical diagnosis and does not replace clinical judgment or confirmatory laboratory testing.
+    </footer>
+
+  </div>
+
+  <script>
+    // Application state holding patient vitals, active walkthrough step, scan progress, and demo modes
+    const state = {
+      spo2: 98,
+      hr: 74,
+      vibScore: 0.18,
+      symptomatic: false,
+      redFlag: false,
+      walkStep: 1,
+      scanning: false,
+      scanProgress: 0,
+      autoTour: false,
+      slowDemoActive: false,
+      slowDemoPaused: false,
+      slowDemoSpeed: 1,
+      slowDemoSceneIndex: 0,
+      slowDemoElapsedMs: 0,
+      detachedWalkthrough: false,
+      acousticBurstUntilMs: 0,
+      piezoInspectMarker: null,
+      ppgInspectMarker: null
+    };
+
+    const stepMeta = {
+      1: {
+        label: 'Step 1/4: Neck Vibration Capture',
+        caption: 'An IP65 silicone neck clip with a piezoelectric sensor sits against the throat to record cough and 10-second vowel vibrations without ambient room noise.'
+      },
+      2: {
+        label: 'Step 2/4: Fingertip Pulse Oximeter',
+        caption: 'A clip-on pulse oximeter measures peripheral oxygen saturation (SpO₂) and heart rate via optical PPG sensing.'
+      },
+      3: {
+        label: 'Step 3/4: ESP32-S3 & USB-C OTG',
+        caption: 'The ESP32-S3 filters raw signals, runs a Signal Quality Index (SQI) check, and streams clean packets over USB-C OTG without needing internet.'
+      },
+      4: {
+        label: 'Step 4/4: Offline LiteRT Triage',
+        caption: 'The Android app runs a local LiteRT (formerly TensorFlow Lite) model in under 30 seconds to output GREEN, YELLOW, or RED referral guidance.'
+      }
+    };
+
+    const stepCameraMap = {
+      1: 'translate(10%, 6%) scale(1.16)',
+      2: 'translate(10%, -8%) scale(1.16)',
+      3: 'translate(-2%, 0%) scale(1.14)',
+      4: 'translate(-12%, 0%) scale(1.14)'
+    };
+
+    // 6-scene slow auto-demo sequence with unhurried durations and smooth camera focus
+    const slowDemoScenes = [
+      {
+        step: 1,
+        durationMs: 5200,
+        camera: 'translate(11%, 6%) scale(1.22)',
+        title: 'Scene 1/6: Tracheal Neck Clip',
+        caption: 'First, the IP65 silicone neck clip rests gently against the throat to pick up tissue vibrations during a cough or 10-second vowel sound while ignoring room noise.'
+      },
+      {
+        step: 2,
+        durationMs: 5200,
+        camera: 'translate(11%, -8%) scale(1.22)',
+        title: 'Scene 2/6: Fingertip Pulse Oximeter',
+        caption: 'Next, the fingertip pulse oximeter shines red and infrared light to read blood oxygen (SpO₂) and pulse rate through the PPG blood-volume wave.'
+      },
+      {
+        step: 3,
+        durationMs: 5400,
+        camera: 'translate(-2%, 0%) scale(1.2)',
+        title: 'Scene 3/6: ESP32-S3 & SQI Check',
+        caption: 'The ESP32-S3 module conditions raw sensor signals, checks Signal Quality Index (SQI), and sends clean data over a USB-C OTG cable with zero internet.'
+      },
+      {
+        step: 4,
+        durationMs: 5600,
+        camera: 'translate(-13%, 0%) scale(1.2)',
+        title: 'Scene 4/6: Offline LiteRT Inference',
+        caption: 'On the Android phone, the offline LiteRT model combines vibration features, SpO₂, and clinical rules in under 30 seconds.'
+      },
+      {
+        step: 2,
+        durationMs: 5600,
+        camera: 'translate(6%, -4%) scale(1.12)',
+        title: 'Scene 5/6: Urgent Low-SpO₂ & Red-Flag Check',
+        caption: 'If SpO₂ drops below 92% or red-flag symptoms appear, RespiTriage immediately highlights RED for urgent clinical referral.'
+      },
+      {
+        step: 4,
+        durationMs: 5400,
+        camera: 'translate(0%, 0%) scale(1)',
+        title: 'Scene 6/6: Field Safeguards & Rural Reach',
+        caption: 'Built for ~₹1,500 at scale with alcohol-wipe hygiene, Gram Sabha demos, and two-stage PHC validation to support ASHA workers across remote villages.'
+      }
+    ];
+
+    function computeTriageDecision() {
+      if (state.redFlag || state.spo2 < 92) {
+        return {
+          code: 'RED',
+          title: 'Urgent Clinical Referral',
+          description: state.spo2 < 92
+            ? `Low blood oxygen (SpO₂ ${state.spo2}%, below provisional 92% threshold) detected. Escalate immediately for urgent clinical evaluation.`
+            : 'Red-flag clinical signs reported. Immediate hospital/clinical referral is required regardless of vibration or AI score.',
+          cardClass: 'hud-box rounded-xl p-4 space-y-3 bg-red-50 border-[#DC2626]',
+          pillClass: 'px-2 py-0.5 rounded font-mono text-[11px] font-extrabold bg-[#DC2626] text-white',
+          titleClass: 'text-base font-extrabold text-[#7F1D1D]',
+          phoneBoxClass: 'rounded-lg p-2 bg-red-50 border border-red-500 text-center',
+          phoneCodeClass: 'font-mono text-xs font-extrabold text-[#DC2626]',
+          phoneSubClass: 'text-[10px] font-semibold text-red-900 leading-tight'
+        };
+      }
+
+      if (state.symptomatic && state.vibScore >= 0.45) {
+        return {
+          code: 'YELLOW',
+          title: 'Diagnostic Referral Recommended',
+          description: `Elevated tracheal vibration feature score (${state.vibScore.toFixed(2)}) in a symptomatic patient. Recommend clinical evaluation and confirmatory testing.`,
+          cardClass: 'hud-box rounded-xl p-4 space-y-3 bg-amber-50 border-[#D97706]',
+          pillClass: 'px-2 py-0.5 rounded font-mono text-[11px] font-extrabold bg-[#D97706] text-white',
+          titleClass: 'text-base font-extrabold text-[#78350F]',
+          phoneBoxClass: 'rounded-lg p-2 bg-amber-50 border border-amber-500 text-center',
+          phoneCodeClass: 'font-mono text-xs font-extrabold text-[#D97706]',
+          phoneSubClass: 'text-[10px] font-semibold text-amber-900 leading-tight'
+        };
+      }
+
+      return {
+        code: 'GREEN',
+        title: 'Standard Symptom Protocol',
+        description: 'No device-based escalation detected. Persistent cough or symptoms still require standard ASHA clinical assessment.',
+        cardClass: 'hud-box rounded-xl p-4 space-y-3 bg-green-50 border-[#16A34A]',
+        pillClass: 'px-2 py-0.5 rounded font-mono text-[11px] font-extrabold bg-[#16A34A] text-white',
+        titleClass: 'text-base font-extrabold text-[#14532D]',
+        phoneBoxClass: 'rounded-lg p-2 bg-green-50 border border-green-500 text-center',
+        phoneCodeClass: 'font-mono text-xs font-extrabold text-[#16A34A]',
+        phoneSubClass: 'text-[10px] font-semibold text-green-900 leading-tight'
+      };
+    }
+
+    function renderAllUI() {
+      document.getElementById('spo2ValueDisplay').textContent = `${state.spo2}%`;
+      document.getElementById('hrValueDisplay').textContent = `${state.hr} BPM`;
+      document.getElementById('vibValueDisplay').textContent = state.vibScore.toFixed(2);
+      document.getElementById('symptomaticCheckbox').checked = state.symptomatic;
+      document.getElementById('redFlagCheckbox').checked = state.redFlag;
+
+      const decision = computeTriageDecision();
+
+      // Update right telemetry column
+      const card = document.getElementById('referralCard');
+      card.className = decision.cardClass;
+      document.getElementById('referralBadgePill').className = decision.pillClass;
+      document.getElementById('referralBadgePill').textContent = decision.code;
+      document.getElementById('referralTitle').className = decision.titleClass;
+      document.getElementById('referralTitle').textContent = decision.title;
+      document.getElementById('referralDescription').textContent = decision.description;
+
+      const spo2El = document.getElementById('telemetrySpo2');
+      spo2El.textContent = state.spo2 < 92 ? `${state.spo2}% (Low < 92%)` : `${state.spo2}% (Normal)`;
+      spo2El.className = state.spo2 < 92 ? 'font-bold text-[#DC2626]' : 'font-bold text-[#16A34A]';
+
+      document.getElementById('telemetryVib').textContent = state.vibScore.toFixed(2);
+
+      const rfEl = document.getElementById('telemetryRedFlag');
+      rfEl.textContent = state.redFlag ? 'Present' : 'None';
+      rfEl.className = state.redFlag ? 'font-bold text-[#DC2626]' : 'font-bold text-[#16A34A]';
+
+      // Update Android smartphone screen
+      document.getElementById('phoneSpo2Hr').textContent = `${state.spo2}% • ${state.hr} BPM`;
+      const sqiEl = document.getElementById('phoneSqiStatus');
+      if (state.spo2 < 86) {
+        sqiEl.textContent = 'LOW PERFUSION';
+        sqiEl.className = 'font-bold text-[#D97706]';
+      } else {
+        sqiEl.textContent = 'VERIFIED';
+        sqiEl.className = 'font-bold text-[#16A34A]';
+      }
+
+      const phoneBadge = document.getElementById('phoneReferralBadge');
+      phoneBadge.className = decision.phoneBoxClass;
+      const phoneCode = document.getElementById('phoneReferralCode');
+      phoneCode.className = decision.phoneCodeClass;
+      phoneCode.textContent = decision.code;
+      const phoneSub = document.getElementById('phoneReferralSub');
+      phoneSub.className = decision.phoneSubClass;
+      phoneSub.textContent = decision.title;
+
+      // Update waveform labels
+      document.getElementById('piezoLabel').textContent = state.vibScore >= 0.45 ? 'ELEVATED' : 'BASELINE';
+      document.getElementById('piezoLabel').className = state.vibScore >= 0.45 ? 'font-bold text-[#D97706]' : 'font-bold text-[#0F766E]';
+      document.getElementById('ppgLabel').textContent = `SpO₂ ${state.spo2}%`;
+      document.getElementById('ppgLabel').className = state.spo2 < 92 ? 'font-bold text-[#DC2626]' : 'font-bold text-[#16A34A]';
+    }
+
+    function applyStageCamera(transformValue, activeStep) {
+      const viewport = document.getElementById('hardwareStageViewport');
+      if (!viewport) return;
+      if (transformValue) {
+        viewport.style.transform = transformValue;
+      } else if (activeStep && stepCameraMap[activeStep]) {
+        viewport.style.transform = stepCameraMap[activeStep];
+      } else {
+        viewport.style.transform = 'translate(0%, 0%) scale(1)';
+      }
+    }
+
+    function resetStageCamera() {
+      applyStageCamera('translate(0%, 0%) scale(1)', null);
+      const badge = document.getElementById('stageActionBadge');
+      if (badge) badge.textContent = 'FULL BENCH VIEW';
+    }
+
+    // Triggers an interactive cough / 10-second vowel acoustic burst on the neck clip and waveform
+    function triggerCoughOrVowelBurst() {
+      pauseSlowDemoForManualInput();
+      state.acousticBurstUntilMs = performance.now() + 1800;
+      if (!state.symptomatic) {
+        state.symptomatic = true;
+        state.vibScore = Math.max(state.vibScore, 0.56);
+        document.getElementById('vibInput').value = state.vibScore;
+      }
+
+      const ring = document.getElementById('coughBurstRing');
+      if (ring) {
+        ring.classList.remove('cough-burst-active');
+        void ring.offsetWidth;
+        ring.classList.add('cough-burst-active');
+      }
+
+      const badge = document.getElementById('stageActionBadge');
+      if (badge) {
+        badge.textContent = 'COUGH / 10s VOWEL CAPTURED';
+        badge.className = 'font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 border border-[#1E293B] text-[#92400E]';
+      }
+
+      renderAllUI();
+    }
+
+    // Allows users to click directly on either waveform canvas to inspect a sample point
+    function inspectWaveform(kind, event) {
+      const canvas = kind === 'piezo' ? piezoCanvas : ppgCanvas;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / Math.max(1, rect.width)));
+
+      if (kind === 'piezo') {
+        state.piezoInspectMarker = ratio;
+        const sampleVal = (state.vibScore * (0.7 + 0.5 * Math.sin(ratio * Math.PI * 6))).toFixed(2);
+        document.getElementById('piezoInspectReadout').textContent = `@${Math.round(ratio * 10)}s • ${sampleVal}g`;
+      } else {
+        state.ppgInspectMarker = ratio;
+        const phaseVal = Math.round(60 + 40 * Math.sin(ratio * Math.PI * 4));
+        document.getElementById('ppgInspectReadout').textContent = `SpO₂ ${state.spo2}% • PPG ${phaseVal}%`;
+      }
+    }
+
+    function setWalkthroughStep(stepNum, fromDemo = false, customCamera = null) {
+      // Highlight active hardware group subtly on the stage
+      const groups = {
+        1: 'neckSensorGroup',
+        2: 'oximeterSensorGroup',
+        3: 'esp32ModuleGroup',
+        4: 'androidPhoneFrame'
+      };
+      Object.entries(groups).forEach(([s, elId]) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        if (Number(s) === stepNum) el.classList.add('active-focus-glow');
+        else el.classList.remove('active-focus-glow');
+      });
+
+      const badge = document.getElementById('stageActionBadge');
+      if (badge && performance.now() > state.acousticBurstUntilMs) {
+        badge.textContent = `STEP 0${stepNum} FOCUS`;
+        badge.className = 'font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-white border border-[#1E293B] text-[#0F766E]';
+      }
+
+      if (customCamera) {
+        applyStageCamera(customCamera, stepNum);
+      } else if (fromDemo) {
+        applyStageCamera(stepCameraMap[stepNum], stepNum);
+      } else {
+        applyStageCamera(stepCameraMap[stepNum], stepNum);
+      }
+    }
+
+    function applyPreset(presetName, fromDemo = false) {
+      if (!fromDemo) {
+        pauseSlowDemoForManualInput();
+      }
+      if (presetName === 'healthy') {
+        state.spo2 = 98;
+        state.hr = 74;
+        state.vibScore = 0.18;
+        state.symptomatic = false;
+        state.redFlag = false;
+      } else if (presetName === 'yellow') {
+        state.spo2 = 96;
+        state.hr = 88;
+        state.vibScore = 0.72;
+        state.symptomatic = true;
+        state.redFlag = false;
+      } else if (presetName === 'low_spo2') {
+        state.spo2 = 88;
+        state.hr = 108;
+        state.vibScore = 0.58;
+        state.symptomatic = true;
+        state.redFlag = false;
+      } else if (presetName === 'red_flag') {
+        state.spo2 = 95;
+        state.hr = 96;
+        state.vibScore = 0.64;
+        state.symptomatic = true;
+        state.redFlag = true;
+      }
+
+      document.getElementById('spo2Input').value = state.spo2;
+      document.getElementById('hrInput').value = state.hr;
+      document.getElementById('vibInput').value = state.vibScore;
+      renderAllUI();
+    }
+
+    function updateControlsFromUI() {
+      pauseSlowDemoForManualInput();
+      state.spo2 = Number(document.getElementById('spo2Input').value);
+      state.hr = Number(document.getElementById('hrInput').value);
+      state.vibScore = Number(document.getElementById('vibInput').value);
+      state.symptomatic = document.getElementById('symptomaticCheckbox').checked;
+      state.redFlag = document.getElementById('redFlagCheckbox').checked;
+      renderAllUI();
+    }
+
+    function startTriageScan() {
+      if (state.scanning) return;
+      state.scanning = true;
+      state.scanProgress = 0;
+      const phoneFrame = document.getElementById('androidPhoneFrame');
+      phoneFrame.classList.add('phone-scanning');
+      document.getElementById('phoneScanState').textContent = 'RUNNING LiteRT...';
+      setWalkthroughStep(4, true);
+    }
+
+    function toggleDetachedWalkthroughMode() {
+      state.detachedWalkthrough = !state.detachedWalkthrough;
+      const simCol = document.getElementById('triageSimulatorColumn');
+      const refCol = document.getElementById('referralTelemetryColumn');
+      const centerCol = document.getElementById('centerWalkthroughColumn');
+      const detailsSec = document.getElementById('projectDetailsSection');
+      const detBtn = document.getElementById('detachedModeBtn');
+      const detBadge = document.getElementById('detachedBadge');
+      const returnBtn = document.getElementById('returnFullWorkbenchBtn');
+
+      if (state.detachedWalkthrough) {
+        simCol.classList.add('hidden');
+        refCol.classList.add('hidden');
+        detailsSec.classList.add('hidden');
+        centerCol.className = 'lg:col-span-12 space-y-4';
+        detBtn.textContent = '↙ DOCK WALKTHROUGH';
+        detBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#0F766E] text-white font-mono text-xs font-bold';
+        detBadge.classList.remove('hidden');
+        returnBtn.classList.remove('hidden');
+      } else {
+        simCol.classList.remove('hidden');
+        refCol.classList.remove('hidden');
+        detailsSec.classList.remove('hidden');
+        centerCol.className = 'lg:col-span-6 space-y-4';
+        detBtn.textContent = '⤢ DETACHED WALKTHROUGH';
+        detBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-white text-[#1E293B] font-mono text-xs font-bold';
+        detBadge.classList.add('hidden');
+        returnBtn.classList.add('hidden');
+      }
+
+      requestAnimationFrame(resizeCanvases);
+    }
+
+    function toggleAutoTour() {
+      state.autoTour = !state.autoTour;
+      const btn = document.getElementById('autoTourBtn');
+      if (state.autoTour) {
+        state.slowDemoActive = false;
+        state.slowDemoPaused = false;
+        document.getElementById('slowDemoBanner').classList.add('hidden');
+        btn.textContent = '↻ AUTO-TOUR: ON';
+        btn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#0284C7] text-white font-mono text-xs font-bold';
+      } else {
+        btn.textContent = '↻ AUTO-TOUR: OFF';
+        btn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold';
+      }
+    }
+
+    function updateSlowDemoBannerUI() {
+      const banner = document.getElementById('slowDemoBanner');
+      const playBtn = document.getElementById('slowDemoPlayBtn');
+      const badge = document.getElementById('slowDemoBadge');
+      const timerLabel = document.getElementById('slowDemoTimerLabel');
+
+      if (!state.slowDemoActive && !state.slowDemoPaused) {
+        banner.classList.add('hidden');
+        playBtn.textContent = '▶ SLOW DEMO';
+        return;
+      }
+
+      banner.classList.remove('hidden');
+      const scene = slowDemoScenes[state.slowDemoSceneIndex] || slowDemoScenes[0];
+      document.getElementById('slowDemoSceneTitle').textContent = scene.title;
+      document.getElementById('slowDemoCaption').textContent = scene.caption;
+
+      const pct = Math.min(100, Math.max(0, (state.slowDemoElapsedMs / scene.durationMs) * 100));
+      document.getElementById('slowDemoProgressBar').style.width = `${pct.toFixed(1)}%`;
+
+      if (state.slowDemoActive && !state.slowDemoPaused) {
+        playBtn.textContent = '❚❚ PAUSE';
+        badge.textContent = `SLOW DEMO • ${state.slowDemoSpeed}x`;
+        badge.className = 'px-2 py-0.5 rounded bg-[#0284C7] text-white font-mono text-[10px] font-bold';
+        timerLabel.textContent = 'Auto-pauses on manual click';
+      } else {
+        playBtn.textContent = '▶ RESUME';
+        badge.textContent = 'PAUSED FOR MANUAL EXPLORATION';
+        badge.className = 'px-2 py-0.5 rounded bg-[#D97706] text-white font-mono text-[10px] font-bold';
+        timerLabel.textContent = 'Click Resume to continue slow demo';
+      }
+    }
+
+    function applySlowDemoScene(index) {
+      const scene = slowDemoScenes[index];
+      if (!scene) return;
+      state.slowDemoSceneIndex = index;
+      state.slowDemoElapsedMs = 0;
+
+      if (index === 4) {
+        applyPreset('low_spo2', true);
+      } else if (index === 0) {
+        applyPreset('healthy', true);
+      }
+
+      setWalkthroughStep(scene.step, true, scene.camera);
+      updateSlowDemoBannerUI();
+    }
+
+    function toggleSlowDemoPlayPause() {
+      if (!state.slowDemoActive && !state.slowDemoPaused) {
+        state.autoTour = false;
+        document.getElementById('autoTourBtn').textContent = '↻ AUTO-TOUR: OFF';
+        document.getElementById('autoTourBtn').className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold';
+        state.slowDemoActive = true;
+        state.slowDemoPaused = false;
+        applySlowDemoScene(0);
+      } else if (state.slowDemoActive && !state.slowDemoPaused) {
+        state.slowDemoPaused = true;
+        updateSlowDemoBannerUI();
+      } else {
+        state.slowDemoPaused = false;
+        state.slowDemoActive = true;
+        updateSlowDemoBannerUI();
+      }
+    }
+
+    function stopSlowDemo() {
+      state.slowDemoActive = false;
+      state.slowDemoPaused = false;
+      state.slowDemoSceneIndex = 0;
+      state.slowDemoElapsedMs = 0;
+      resetStageCamera();
+      updateSlowDemoBannerUI();
+    }
+
+    function pauseSlowDemoForManualInput() {
+      if (state.slowDemoActive && !state.slowDemoPaused) {
+        state.slowDemoPaused = true;
+        updateSlowDemoBannerUI();
+      }
+    }
+
+    function changeSlowDemoSpeed(val) {
+      const parsed = Number(val);
+      state.slowDemoSpeed = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+      updateSlowDemoBannerUI();
+    }
+
+    function switchInfoTab(tab) {
+      const impactBtn = document.getElementById('tabImpactBtn');
+      const safeBtn = document.getElementById('tabSafeguardsBtn');
+      const impactPanel = document.getElementById('panelImpact');
+      const safePanel = document.getElementById('panelSafeguards');
+
+      if (tab === 'impact') {
+        impactBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#0F766E] text-white font-mono text-xs font-bold';
+        safeBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold';
+        impactPanel.classList.remove('hidden');
+        safePanel.classList.add('hidden');
+      } else {
+        safeBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#0F766E] text-white font-mono text-xs font-bold';
+        impactBtn.className = 'lab-btn px-3 py-1.5 rounded-lg bg-[#FAF6EE] text-[#1E293B] font-mono text-xs font-bold';
+        safePanel.classList.remove('hidden');
+        impactPanel.classList.add('hidden');
+      }
+    }
+
+    // Canvas sizing & waveform animation loop
+    const piezoCanvas = document.getElementById('piezoCanvas');
+    const ppgCanvas = document.getElementById('ppgCanvas');
+
+    function resizeCanvases() {
+      [piezoCanvas, ppgCanvas].forEach((canvas) => {
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      });
+    }
+
+    function drawWaveforms(timeSec) {
+      const nowMs = performance.now();
+      const burstActive = nowMs < state.acousticBurstUntilMs;
+
+      // 1. Tracheal Piezo Signal
+      if (piezoCanvas) {
+        const ctx = piezoCanvas.getContext('2d');
+        const w = piezoCanvas.width;
+        const h = piezoCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        const burstBoost = burstActive ? 1.55 : 1.0;
+        const amp = Math.min(h * 0.44, (0.15 + state.vibScore * 0.75) * (h * 0.34) * burstBoost);
+        const freq = state.symptomatic || burstActive ? 0.09 : 0.045;
+
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = burstActive ? '#DC2626' : (state.vibScore >= 0.45 ? '#D97706' : '#0F766E');
+        for (let x = 0; x < w; x += 2) {
+          const envelope = 0.65 + 0.35 * Math.sin(x * 0.025 - timeSec * 3.2);
+          const y = h / 2 + Math.sin(x * freq - timeSec * 8.2) * amp * envelope;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        if (state.piezoInspectMarker !== null) {
+          const mx = state.piezoInspectMarker * w;
+          ctx.save();
+          ctx.strokeStyle = '#0F766E';
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(mx, 0);
+          ctx.lineTo(mx, h);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // 2. Fingertip PPG Optical Pulse Wave
+      if (ppgCanvas) {
+        const ctx = ppgCanvas.getContext('2d');
+        const w = ppgCanvas.width;
+        const h = ppgCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+
+        const beatFreq = (state.hr / 60) * Math.PI * 2;
+        const ppgAmp = state.spo2 < 92 ? h * 0.24 : h * 0.34;
+
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = state.spo2 < 92 ? '#DC2626' : '#0284C7';
+        for (let x = 0; x < w; x += 2) {
+          const phase = (x / 68) * Math.PI * 2 - timeSec * (beatFreq * 0.45);
+          const systolic = Math.pow(Math.max(0, Math.sin(phase)), 3);
+          const dicrotic = 0.28 * Math.pow(Math.max(0, Math.sin(phase - 0.85)), 4);
+          const y = h * 0.82 - (systolic + dicrotic) * ppgAmp;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        if (state.ppgInspectMarker !== null) {
+          const mx = state.ppgInspectMarker * w;
+          ctx.save();
+          ctx.strokeStyle = '#0284C7';
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(mx, 0);
+          ctx.lineTo(mx, h);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    let lastFrameTime = performance.now();
+    let autoTourAccumulatorMs = 0;
+
+    function animationLoop(now) {
+      const dtMs = Math.min(100, now - lastFrameTime);
+      lastFrameTime = now;
+
+      // Update 30-second simulated scan bar (accelerated for snappy interactive preview)
+      if (state.scanning) {
+        state.scanProgress += dtMs * 0.032;
+        if (state.scanProgress >= 100) {
+          state.scanProgress = 100;
+          state.scanning = false;
+          document.getElementById('androidPhoneFrame').classList.remove('phone-scanning');
+          document.getElementById('phoneScanState').textContent = 'TRIAGE COMPLETE';
+        }
+        document.getElementById('phoneScanBar').style.width = `${state.scanProgress.toFixed(1)}%`;
+        document.getElementById('phoneScanPercent').textContent = `${Math.round(state.scanProgress)}%`;
+      }
+
+      // Update Slow Auto-Demo progression
+      if (state.slowDemoActive && !state.slowDemoPaused) {
+        state.slowDemoElapsedMs += dtMs * state.slowDemoSpeed;
+        const scene = slowDemoScenes[state.slowDemoSceneIndex] || slowDemoScenes[0];
+        if (state.slowDemoElapsedMs >= scene.durationMs) {
+          const nextIdx = (state.slowDemoSceneIndex + 1) % slowDemoScenes.length;
+          applySlowDemoScene(nextIdx);
+        } else {
+          updateSlowDemoBannerUI();
+        }
+      }
+
+      // Optional standard Auto-Tour across steps 1-4
+      if (state.autoTour && !state.slowDemoActive) {
+        autoTourAccumulatorMs += dtMs;
+        if (autoTourAccumulatorMs >= 2600) {
+          autoTourAccumulatorMs = 0;
+          const nextStep = (state.walkStep % 4) + 1;
+          setWalkthroughStep(nextStep, true);
+        }
+      }
+
+      drawWaveforms(now / 1000);
+      requestAnimationFrame(animationLoop);
+    }
+
+    window.addEventListener('resize', resizeCanvases);
+    window.addEventListener('DOMContentLoaded', () => {
+      renderAllUI();
+      setWalkthroughStep(1, true);
+      resizeCanvases();
+      requestAnimationFrame(animationLoop);
+    });
+  </script>
+</body>
+</html>
